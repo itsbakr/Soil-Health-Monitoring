@@ -1,0 +1,58 @@
+{
+  "name": "soil-health-monitoring-platform",
+  "version": "1.0.0",
+  "description": "Comprehensive soil health monitoring and agricultural ROI optimization platform",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000",
+    "build": "npm run build:frontend",
+    "build:frontend": "cd frontend && npm run build",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:frontend": "cd frontend && npm start",
+    "start:backend": "cd backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000",
+    "install:all": "npm run install:frontend && npm run install:backend",
+    "install:frontend": "cd frontend && npm install",
+    "install:backend": "cd backend && pip install -r requirements.txt",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "cd frontend && npm test",
+    "test:backend": "cd backend && pytest",
+    "lint": "npm run lint:frontend && npm run lint:backend",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:backend": "cd backend && flake8 . && black --check . && isort --check-only .",
+    "format": "npm run format:frontend && npm run format:backend",
+    "format:frontend": "cd frontend && npm run lint -- --fix",
+    "format:backend": "cd backend && black . && isort .",
+    "setup": "npm run setup:env && npm run install:all",
+    "setup:env": "cp frontend/env.template frontend/.env.local && cp backend/env.template backend/.env && echo 'Environment files created. Please edit with your API keys.'",
+    "docs": "cd backend && uvicorn main:app --reload --host 0.0.0.0 --port 8000 && echo 'API docs available at http://localhost:8000/docs'",
+    "clean": "npm run clean:frontend && npm run clean:backend",
+    "clean:frontend": "cd frontend && rm -rf .next node_modules",
+    "clean:backend": "cd backend && find . -type d -name __pycache__ -delete && find . -name '*.pyc' -delete"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.9.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "your-repository-url"
+  },
+  "keywords": [
+    "agriculture",
+    "soil-health",
+    "satellite-data",
+    "ai",
+    "roi-optimization",
+    "farming",
+    "nextjs",
+    "fastapi",
+    "supabase"
+  ],
+  "author": "Soil Health Team",
+  "license": "MIT"
+} 
