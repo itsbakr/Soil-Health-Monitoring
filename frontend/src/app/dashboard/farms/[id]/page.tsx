@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getFarm, getUser, deleteFarm } from '@/lib/supabase'
 import type { Database } from '@/lib/supabase'
+import { runCompleteAnalysis, analyzeSoilHealth, analyzeROI, pollAnalysisStatus, getSoilHealthReport, getROIReport, SoilHealthReport, ROIAnalysisReport } from '@/lib/api'
+import SoilHealthDisplay from '@/components/Analysis/SoilHealthDisplay'
+import ROIDisplay from '@/components/Analysis/ROIDisplay'
 
 type Farm = Database['public']['Tables']['farms']['Row']
 
@@ -18,7 +21,15 @@ export default function FarmDetailPage({ params }: FarmDetailPageProps) {
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState('')
+  const [soilHealthReport, setSoilHealthReport] = useState<SoilHealthReport | null>(null)
+  const [roiReport, setROIReport] = useState<ROIAnalysisReport | null>(null)
+  const [showSoilHealth, setShowSoilHealth] = useState(false)
+  const [showROI, setShowROI] = useState(false)
   const router = useRouter()
+  
+
 
   useEffect(() => {
     async function loadFarmAndUser() {
@@ -68,6 +79,103 @@ export default function FarmDetailPage({ params }: FarmDetailPageProps) {
       console.error('Error deleting farm:', err)
       setError(err.message || 'Failed to delete farm')
       setDeleting(false)
+    }
+  }
+
+  const handleAnalysis = async () => {
+    if (!farm) return
+    
+    setAnalyzing(true)
+    setAnalysisError('')
+    
+    try {
+      console.log('🚀 Starting AI analysis for farm:', farm.name)
+      const results = await runCompleteAnalysis(farm.id)
+      
+      setSoilHealthReport(results.soilHealth)
+      setROIReport(results.roi)
+      setShowSoilHealth(true) // Show soil health report first
+    } catch (err: any) {
+      console.error('Analysis failed:', err)
+      setAnalysisError(err.message || 'Analysis failed. Please try again.')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const handleSoilHealthOnly = async () => {
+    if (!farm) return
+    
+    setAnalyzing(true)
+    setAnalysisError('')
+    
+    try {
+      console.log('🔬 Starting soil health analysis for farm:', farm.name)
+      
+      const initialReport = await analyzeSoilHealth(farm.id)
+      
+      // Simple polling with type casting
+      let attempts = 0
+      let finalReport = initialReport
+      
+      while (attempts < 30 && finalReport.status !== 'completed') {
+        if (finalReport.status === 'failed') {
+          throw new Error('Analysis failed')
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        finalReport = await getSoilHealthReport(initialReport.id)
+        attempts++
+      }
+      
+      if (finalReport.status !== 'completed') {
+        throw new Error('Analysis timeout - please try again')
+      }
+      
+              setSoilHealthReport(finalReport)
+      setShowSoilHealth(true)
+    } catch (err: any) {
+      console.error('Soil health analysis failed:', err)
+      setAnalysisError(err.message || 'Soil health analysis failed. Please try again.')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const handleROIOnly = async () => {
+    if (!farm) return
+    
+    setAnalyzing(true)
+    setAnalysisError('')
+    
+    try {
+      const initialReport = await analyzeROI(farm.id)
+      
+      // Simple polling with type casting
+      let attempts = 0
+      let finalReport = initialReport
+      
+      while (attempts < 30 && finalReport.status !== 'completed') {
+        if (finalReport.status === 'failed') {
+          throw new Error('Analysis failed')
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        finalReport = await getROIReport(initialReport.id)
+        attempts++
+      }
+      
+      if (finalReport.status !== 'completed') {
+        throw new Error('Analysis timeout - please try again')
+      }
+      
+      setROIReport(finalReport)
+      setShowROI(true)
+    } catch (err: any) {
+      console.error('ROI analysis failed:', err)
+      setAnalysisError(err.message || 'ROI analysis failed. Please try again.')
+    } finally {
+      setAnalyzing(false)
     }
   }
 
@@ -232,6 +340,8 @@ export default function FarmDetailPage({ params }: FarmDetailPageProps) {
             </div>
           </div>
 
+
+
           {/* Action Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             
@@ -251,11 +361,30 @@ export default function FarmDetailPage({ params }: FarmDetailPageProps) {
                     </div>
                   </div>
                 </div>
-                <div className="mt-5">
-                  <button className="bg-soil-600 hover:bg-soil-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                    Generate Report
+                <div className="mt-5 space-x-2">
+                  <button 
+                    onClick={handleSoilHealthOnly}
+                    disabled={analyzing}
+                    className="bg-soil-600 hover:bg-soil-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:cursor-not-allowed"
+                  >
+                    {analyzing ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Analyzing...
+                      </>
+                    ) : 'Generate Report'}
                   </button>
-                  <span className="ml-2 text-xs text-gray-500">(Coming Soon)</span>
+                  {soilHealthReport && (
+                    <button
+                      onClick={() => setShowSoilHealth(true)}
+                      className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                    >
+                      View Report
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -276,13 +405,74 @@ export default function FarmDetailPage({ params }: FarmDetailPageProps) {
                     </div>
                   </div>
                 </div>
-                <div className="mt-5">
-                  <button className="bg-crop-600 hover:bg-crop-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
-                    Analyze ROI
+                <div className="mt-5 space-x-2">
+                  <button 
+                    onClick={handleROIOnly}
+                    disabled={analyzing}
+                    className="bg-crop-600 hover:bg-crop-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:cursor-not-allowed"
+                  >
+                    {analyzing ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Analyzing...
+                      </>
+                    ) : 'Analyze ROI'}
                   </button>
-                  <span className="ml-2 text-xs text-gray-500">(Coming Soon)</span>
+                  {roiReport && (
+                    <button
+                      onClick={() => setShowROI(true)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                    >
+                      View Report
+                    </button>
+                  )}
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Complete Analysis Section */}
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-6 mb-6">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">🚀 Complete AI Analysis</h3>
+              <p className="text-gray-600 mb-4">
+                Run comprehensive soil health and ROI analysis with our AI-powered agents
+              </p>
+              <button 
+                onClick={handleAnalysis}
+                disabled={analyzing}
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white px-6 py-3 rounded-lg text-base font-medium transition-all disabled:cursor-not-allowed transform hover:scale-105"
+              >
+                {analyzing ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white inline" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Running AI Analysis...
+                  </>
+                ) : '🧠 Start Complete AI Analysis'}
+              </button>
+              
+              {analysisError && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                  <div className="flex items-center">
+                    <svg className="h-5 w-5 text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-sm text-red-800">{analysisError}</span>
+                  </div>
+                </div>
+              )}
+              
+              {(soilHealthReport || roiReport) && (
+                <div className="mt-4 text-sm text-gray-600">
+                  ✅ Analysis complete! Use the buttons above to view individual reports.
+                </div>
+              )}
             </div>
           </div>
 
@@ -313,6 +503,21 @@ export default function FarmDetailPage({ params }: FarmDetailPageProps) {
           </div>
         </div>
       </main>
+
+      {/* Analysis Results Modals */}
+      {showSoilHealth && soilHealthReport && (
+        <SoilHealthDisplay 
+          report={soilHealthReport} 
+          onClose={() => setShowSoilHealth(false)}
+        />
+      )}
+
+      {showROI && roiReport && (
+        <ROIDisplay 
+          report={roiReport} 
+          onClose={() => setShowROI(false)}
+        />
+      )}
     </div>
   )
 } 

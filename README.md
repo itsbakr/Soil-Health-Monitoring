@@ -140,17 +140,28 @@ OPENWEATHERMAP_API_KEY=your_api_key
 
 **Cost**: Free tier (1,000 calls/day), $40/month for 100k calls
 
-#### 4. Commodity Price APIs (Optional)
+#### 4. Commodity Price APIs (Optional) - Multiple Free Tiers Available
 
-**4a. Commodities API**
-- Website: [commodities-api.com](https://commodities-api.com)
-- Cost: Free tier (1,000 requests/month), $10/month for 10k requests
-- Variable: `COMMODITIES_API_KEY`
-
-**4b. Alpha Vantage**
-- Website: [alphavantage.co](https://www.alphavantage.co)
-- Cost: Free tier (5 API requests/minute), $49.99/month unlimited
+**4a. Alpha Vantage** (RECOMMENDED)
+- Website: [alphavantage.co](https://www.alphavantage.co/support/#api-key)
+- Cost: **25 requests/day FREE**, then $49.99/month unlimited
+- Perfect for development and light production use
 - Variable: `ALPHA_VANTAGE_API_KEY`
+
+**4b. Twelve Data** (Best Free Tier)
+- Website: [twelvedata.com/pricing](https://twelvedata.com/pricing)
+- Cost: **800 requests/day FREE**, excellent coverage
+- Variable: `TWELVE_DATA_API_KEY`
+
+**4c. Financial Modeling Prep**
+- Website: [financialmodelingprep.com](https://financialmodelingprep.com/developer/docs)
+- Cost: **250 requests/day FREE**
+- Variable: `FMP_API_KEY`
+
+**4d. Commodities API** (Paid Only)
+- Website: [commodities-api.com](https://commodities-api.com)
+- Cost: 7-day free trial only, then $49.99/month minimum
+- Variable: `COMMODITIES_API_KEY`
 
 #### 5. AI APIs (Optional)
 
@@ -181,9 +192,9 @@ OPENWEATHERMAP_API_KEY=your_api_key
 ### Production Tier (Recommended for Live Usage)
 - **Supabase Pro**: $25/month
 - **OpenWeatherMap**: $40/month (100k calls)
-- **Commodities API**: $10/month (10k requests)
+- **Alpha Vantage**: $49.99/month OR use free tier (25 calls/day)
 - **AI APIs**: ~$10-50/month (depending on usage)
-- **Total**: ~$85-125/month
+- **Total**: ~$75-165/month (or ~$75/month with free commodity API tier)
 
 ## 🏗️ Project Structure
 

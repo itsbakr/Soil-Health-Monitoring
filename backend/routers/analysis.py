@@ -32,26 +32,35 @@ analysis_results = {}
 # Background task functions
 async def process_soil_health_analysis(analysis_id: str, farm_id: str, farm_coords: FarmCoordinates, include_historical: bool = True):
     """Background task to process comprehensive soil health analysis using satellite, weather, and market data"""
+    import time
+    
+    analysis_start = time.time()
+    analysis_short_id = analysis_id[:8]
+    
     try:
-        logger.info(f"Starting comprehensive analysis for farm {farm_id}")
+        logger.info(f"🚀 [ANALYSIS-{analysis_short_id}] Starting comprehensive analysis for farm {farm_id}")
         
         # Update status to in progress
         if analysis_id in analysis_results:
             analysis_results[analysis_id]["status"] = "in_progress"
         
-        # Get all services
+        # Get all services - timing each
+        service_start = time.time()
         satellite_service = get_satellite_service()
         weather_service = get_weather_service()
         crop_price_service = get_crop_price_service()
+        logger.info(f"⚡ [ANALYSIS-{analysis_short_id}] Services initialized in {time.time() - service_start:.2f}s")
         
         if not satellite_service.is_available():
-            logger.warning("Satellite service not available, using demo data")
+            logger.warning(f"📡 [ANALYSIS-{analysis_short_id}] Satellite service not available, using demo data")
         
         # Get current satellite data
+        sat_start = time.time()
         current_data = satellite_service.get_farm_satellite_data(farm_coords)
+        logger.info(f"🛰️ [ANALYSIS-{analysis_short_id}] Satellite data retrieved in {time.time() - sat_start:.2f}s")
         
         if not current_data:
-            logger.warning(f"No satellite data available for farm {farm_id}")
+            logger.warning(f"⚠️ [ANALYSIS-{analysis_short_id}] No satellite data available for farm {farm_id}, using fallback")
             # Use placeholder data for demo
             current_data = SatelliteData(
                 farm_id=farm_id,
@@ -64,16 +73,26 @@ async def process_soil_health_analysis(analysis_id: str, farm_id: str, farm_coor
             )
         
         # Get weather analysis
+        weather_start = time.time()
         weather_data = weather_service.get_agricultural_weather_analysis(
             farm_coords.latitude, 
             farm_coords.longitude,
             "general"  # Default crop type - could be enhanced with actual crop data
         )
+        logger.info(f"🌤️ [ANALYSIS-{analysis_short_id}] Weather analysis completed in {time.time() - weather_start:.2f}s")
         
         # Get market analysis for common crops
+        market_start = time.time()
         corn_prices = await crop_price_service.get_market_analysis("corn")
+        logger.info(f"🌽 [ANALYSIS-{analysis_short_id}] Corn market data retrieved in {time.time() - market_start:.2f}s")
+        
+        soy_start = time.time()
         soybean_prices = await crop_price_service.get_market_analysis("soybeans")
+        logger.info(f"🫘 [ANALYSIS-{analysis_short_id}] Soybean market data retrieved in {time.time() - soy_start:.2f}s")
+        
+        wheat_start = time.time()
         wheat_prices = await crop_price_service.get_market_analysis("wheat")
+        logger.info(f"🌾 [ANALYSIS-{analysis_short_id}] Wheat market data retrieved in {time.time() - wheat_start:.2f}s")
         
         # Get historical data if requested
         historical_data = []
@@ -115,18 +134,47 @@ async def process_soil_health_analysis(analysis_id: str, farm_id: str, farm_coor
                 "moisture_content": current_data.ndmi,
                 "land_surface_temp": current_data.surface_temperature
             },
-            "weather_data": weather_data.__dict__ if weather_data else {},
+            "weather_data": {
+                "current": {
+                    "temperature": weather_data.current.temperature,
+                    "humidity": weather_data.current.humidity,
+                    "precipitation": weather_data.current.precipitation,
+                    "description": weather_data.current.description,
+                    "pressure": weather_data.current.pressure,
+                    "wind_speed": weather_data.current.wind_speed,
+                    "cloud_coverage": weather_data.current.cloud_coverage
+                },
+                "location": weather_data.location,
+                "growing_degree_days": weather_data.growing_degree_days,
+                "drought_risk": weather_data.drought_risk,
+                "frost_risk": weather_data.frost_risk,
+                "heat_stress_index": weather_data.heat_stress_index
+            } if weather_data else {},
             "market_data": {
-                "corn": corn_prices.__dict__ if corn_prices else {},
-                "soybeans": soybean_prices.__dict__ if soybean_prices else {},
-                "wheat": wheat_prices.__dict__ if wheat_prices else {}
+                "corn": {
+                    "current_price": corn_prices.current_price.__dict__ if corn_prices and corn_prices.current_price else {},
+                    "market_sentiment": corn_prices.market_sentiment if corn_prices else None,
+                    "trend": corn_prices.price_history.trend if corn_prices and corn_prices.price_history else None
+                } if corn_prices else {},
+                "soybeans": {
+                    "current_price": soybean_prices.current_price.__dict__ if soybean_prices and soybean_prices.current_price else {},
+                    "market_sentiment": soybean_prices.market_sentiment if soybean_prices else None,
+                    "trend": soybean_prices.price_history.trend if soybean_prices and soybean_prices.price_history else None
+                } if soybean_prices else {},
+                "wheat": {
+                    "current_price": wheat_prices.current_price.__dict__ if wheat_prices and wheat_prices.current_price else {},
+                    "market_sentiment": wheat_prices.market_sentiment if wheat_prices else None,
+                    "trend": wheat_prices.price_history.trend if wheat_prices and wheat_prices.price_history else None
+                } if wheat_prices else {}
             },
             "historical_data": historical_data
         }
         
         # Use AI agents for sophisticated analysis
-        logger.info("🤖 Running AI-powered soil health analysis...")
+        ai_start = time.time()
+        logger.info(f"🤖 [ANALYSIS-{analysis_short_id}] Running AI-powered soil health analysis...")
         soil_health_report = await soil_health_agent.analyze_soil_health(farm_analysis_data)
+        ai_duration = time.time() - ai_start
         
         # Extract results from AI analysis
         health_score = soil_health_report.overall_score
@@ -135,13 +183,13 @@ async def process_soil_health_analysis(analysis_id: str, farm_id: str, farm_coor
         recommendations = [rec.get("description", str(rec)) for rec in soil_health_report.recommendations]
         summary = soil_health_report.farmer_summary or soil_health_report.explanation[:200] + "..."
         
-        logger.info(f"🎯 AI analysis completed - Health Score: {health_score:.1f}, Status: {overall_health}")
+        logger.info(f"🧠 [ANALYSIS-{analysis_short_id}] AI analysis completed in {ai_duration:.2f}s - Health Score: {health_score:.1f}, Status: {overall_health}")
         
         # Update analysis result with enhanced data
         if analysis_id in analysis_results:
             analysis_results[analysis_id].update({
                 "status": "completed",
-                "confidence_score": current_data.data_quality_score,
+                "confidence_score": current_data.data_quality_score / 100.0,  # Convert from 0-100 to 0-1
                 "overall_health": overall_health,
                 "soil_indicators": {
                     "ph_level": 6.8,  # Placeholder - would need additional sensors
@@ -181,7 +229,13 @@ async def process_soil_health_analysis(analysis_id: str, farm_id: str, farm_coor
                     "corn_sentiment": corn_prices.market_sentiment if corn_prices else None,
                     "soybean_sentiment": soybean_prices.market_sentiment if soybean_prices else None,
                     "wheat_sentiment": wheat_prices.market_sentiment if wheat_prices else None,
-                    "favorable_crops": [insight for insight in market_insights]
+                    "favorable_crops": [
+                        crop for crop, prices in [
+                            ("corn", corn_prices), 
+                            ("soybeans", soybean_prices), 
+                            ("wheat", wheat_prices)
+                        ] if prices and prices.market_sentiment in ["bullish", "neutral"]
+                    ]
                 },
                 "summary": summary,
                 "deficiencies": deficiencies,
@@ -189,10 +243,12 @@ async def process_soil_health_analysis(analysis_id: str, farm_id: str, farm_coor
                 "trend_analysis": trend_analysis
             })
         
-        logger.info(f"Completed comprehensive analysis for farm {farm_id}")
+        total_duration = time.time() - analysis_start
+        logger.info(f"✅ [ANALYSIS-{analysis_short_id}] Comprehensive analysis completed for farm {farm_id} in {total_duration:.2f}s")
         
     except Exception as e:
-        logger.error(f"Error in comprehensive analysis: {e}")
+        total_duration = time.time() - analysis_start
+        logger.error(f"❌ [ANALYSIS-{analysis_short_id}] Error in comprehensive analysis after {total_duration:.2f}s: {e}")
         if analysis_id in analysis_results:
             analysis_results[analysis_id]["status"] = "failed"
             analysis_results[analysis_id]["error"] = str(e)
@@ -242,7 +298,7 @@ class SoilHealthReport(BaseModel):
     farm_id: str
     analysis_date: datetime
     status: AnalysisStatus
-    confidence_score: float = Field(..., ge=0, le=100, description="AI confidence score")
+    confidence_score: float = Field(..., ge=0, le=1, description="AI confidence score (0-1)")
     overall_health: HealthLevel
     
     # Detailed indicators
@@ -267,7 +323,7 @@ class CropOption(BaseModel):
     net_profit: float = Field(..., description="Estimated net profit")
     roi_percentage: float = Field(..., description="Return on investment percentage")
     soil_health_impact: str = Field(..., description="Impact on long-term soil health")
-    confidence_score: float = Field(..., ge=0, le=100, description="AI confidence score")
+    confidence_score: float = Field(..., ge=0, le=1, description="AI confidence score (0-1)")
 
 class ROIAnalysisReport(BaseModel):
     id: str
@@ -425,7 +481,7 @@ async def analyze_roi(
                 "net_profit": 320.0,
                 "roi_percentage": 100.0,
                 "soil_health_impact": "Improves nitrogen fixation and soil structure",
-                "confidence_score": 88.0
+                "confidence_score": 0.88
             },
             {
                 "crop_type": "corn",
@@ -436,7 +492,7 @@ async def analyze_roi(
                 "net_profit": 410.0,
                 "roi_percentage": 70.7,
                 "soil_health_impact": "Neutral impact with proper management",
-                "confidence_score": 82.0
+                "confidence_score": 0.82
             }
         ],
         "recommended_crop": "soybeans",
@@ -491,7 +547,53 @@ async def get_roi_report(
     """
     # TODO: Implement report retrieval from database
     # TODO: Verify user ownership
-    pass
+    
+    # Return placeholder ROI report for now
+    return {
+        "id": analysis_id,
+        "farm_id": "placeholder-farm-id",
+        "soil_health_report_id": "soil-analysis-123",
+        "analysis_date": datetime.utcnow(),
+        "status": "completed",
+        "market_forecast": {
+            "corn": {"price": 5.50, "trend": "stable"},
+            "soybeans": {"price": 12.80, "trend": "increasing"}
+        },
+        "weather_forecast": {
+            "precipitation": "average",
+            "temperature": "above_average",
+            "growing_days": 180
+        },
+        "crop_options": [
+            {
+                "crop_type": "soybeans",
+                "recommendation_level": "highly_recommended",
+                "expected_yield": 50.0,
+                "estimated_revenue": 640.0,
+                "input_costs": 320.0,
+                "net_profit": 320.0,
+                "roi_percentage": 100.0,
+                "soil_health_impact": "Improves nitrogen fixation and soil structure",
+                "confidence_score": 0.88
+            },
+            {
+                "crop_type": "corn",
+                "recommendation_level": "recommended",
+                "expected_yield": 180.0,
+                "estimated_revenue": 990.0,
+                "input_costs": 580.0,
+                "net_profit": 410.0,
+                "roi_percentage": 70.7,
+                "soil_health_impact": "Neutral impact with proper management",
+                "confidence_score": 0.82
+            }
+        ],
+        "recommended_crop": "soybeans",
+        "economic_summary": "Based on current soil conditions and market forecasts, soybeans offer the best ROI while improving soil health.",
+        "risk_assessment": "Low risk scenario with stable weather patterns expected. Monitor for late-season drought conditions.",
+        "reasoning": "Soybeans are recommended due to nitrogen-fixing properties that benefit your soil's organic matter levels, combined with favorable market conditions.",
+        "created_at": datetime.utcnow()
+    }
 
 @router.get("/farm/{farm_id}/history")
 async def get_farm_analysis_history(

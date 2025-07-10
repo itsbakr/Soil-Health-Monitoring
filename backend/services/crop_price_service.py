@@ -92,17 +92,19 @@ class CropPriceService:
     
     def __init__(self):
         """Initialize the crop price service"""
+        from config import settings
         self.apis = {
-            "commodities_api": os.getenv('COMMODITIES_API_KEY'),
-            "quandl_api": os.getenv('QUANDL_API_KEY'),
-            "alpha_vantage": os.getenv('ALPHA_VANTAGE_API_KEY')
+            "alpha_vantage": settings.ALPHA_VANTAGE_API_KEY,
+            "commodities_api": settings.COMMODITIES_API_KEY,  # Optional
+            "quandl_api": getattr(settings, 'QUANDL_API_KEY', '')  # Optional, may not be in config
         }
         self.initialized = any(key for key in self.apis.values())
         
         if not self.initialized:
             logger.warning("No crop price API keys found. Service will use demo data.")
         else:
-            logger.info("Crop price service initialized with available APIs")
+            available_apis = [name for name, key in self.apis.items() if key]
+            logger.info(f"✅ Crop price service initialized with APIs: {', '.join(available_apis)}")
     
     def is_available(self) -> bool:
         """Check if the crop price service is available"""
@@ -265,6 +267,13 @@ class CropPriceService:
             except Exception as e:
                 logger.debug(f"Commodities API failed: {e}")
         
+        # Try Alpha Vantage API
+        if self.apis["alpha_vantage"]:
+            try:
+                return await self._fetch_from_alpha_vantage(crop_type, region)
+            except Exception as e:
+                logger.debug(f"Alpha Vantage API failed: {e}")
+        
         # Try other APIs as fallback
         # Add more API integrations here as needed
         
@@ -281,6 +290,81 @@ class CropPriceService:
         """Fetch historical data from available APIs"""
         # Placeholder for API historical data fetching
         return None
+    
+    async def _fetch_from_alpha_vantage(self, crop_type: str, region: str) -> Optional[CropPrice]:
+        """Fetch commodity price from Alpha Vantage API"""
+        try:
+            api_key = self.apis["alpha_vantage"]
+            if not api_key:
+                return None
+            
+            # Alpha Vantage commodity symbols mapping
+            commodity_symbols = {
+                "corn": "CORN",
+                "soybeans": "SOYBEAN", 
+                "wheat": "WHEAT",
+                "coffee": "COFFEE",
+                "sugar": "SUGAR",
+                "cotton": "COTTON",
+                "cattle": "CATTLE",
+                "oil": "CRUDE_OIL",
+                "natural_gas": "NATURAL_GAS"
+            }
+            
+            symbol = commodity_symbols.get(crop_type.lower())
+            if not symbol:
+                logger.warning(f"No Alpha Vantage symbol mapping for crop: {crop_type}")
+                return None
+            
+            # Alpha Vantage commodities endpoint
+            url = f"https://www.alphavantage.co/query"
+            params = {
+                "function": "WTI",  # For commodities
+                "interval": "daily",
+                "apikey": api_key
+            }
+            
+            # For agricultural commodities, use different endpoint
+            if symbol in ["CORN", "SOYBEAN", "WHEAT", "COFFEE", "SUGAR", "COTTON"]:
+                params["function"] = "COMMODITY_CHANNEL_INDEX"
+                params["symbol"] = symbol
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+                
+                # Check for API errors
+                if "Error Message" in data:
+                    logger.error(f"Alpha Vantage API error: {data['Error Message']}")
+                    return None
+                
+                if "Information" in data:
+                    logger.warning(f"Alpha Vantage API info: {data['Information']}")
+                    return None
+                
+                # Parse the response (structure varies by commodity)
+                if "data" in data and data["data"]:
+                    latest_data = data["data"][0] if isinstance(data["data"], list) else data["data"]
+                    price = float(latest_data.get("value", 0))
+                    
+                    return CropPrice(
+                        crop_type=crop_type,
+                        price=price,
+                        unit="USD/unit",
+                        currency="USD",
+                        market=f"Alpha Vantage ({region})",
+                        timestamp=datetime.utcnow(),
+                        change_24h=None,
+                        volume=None
+                    )
+                
+                logger.warning(f"Unexpected Alpha Vantage response structure for {crop_type}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error fetching from Alpha Vantage: {e}")
+            return None
     
     def _get_demo_price(self, crop_type: str, region: str) -> CropPrice:
         """Generate demo price data"""
@@ -325,6 +409,7 @@ class CropPriceService:
     def _get_demo_history(self, crop_type: str, months: int) -> PriceHistory:
         """Generate demo historical price data"""
         import random
+        import math
         
         base_price = self._get_demo_price(crop_type, "US").price
         prices = []
@@ -334,7 +419,7 @@ class CropPriceService:
             date = datetime.now() - timedelta(days=30 * i)
             
             # Add seasonal and trend variations
-            seasonal_factor = 1 + 0.1 * random.sin(2 * 3.14159 * i / 12)  # Annual cycle
+            seasonal_factor = 1 + 0.1 * math.sin(2 * math.pi * i / 12)  # Annual cycle
             trend_factor = 1 + 0.02 * (months - i) / months  # Slight upward trend
             noise = random.uniform(0.9, 1.1)  # Random variation
             

@@ -170,6 +170,23 @@ Use chain-of-thought reasoning - show your step-by-step analysis process."""
 
         return prompt
 
+    def _serialize_farm_data(self, farm_data: Dict[str, Any]) -> str:
+        """Safely serialize farm data to JSON, handling SatelliteData objects"""
+        from services.satellite_service import SatelliteData
+        
+        def serialize_helper(obj):
+            if hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            elif isinstance(obj, dict):
+                return {k: serialize_helper(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [serialize_helper(item) for item in obj]
+            else:
+                return obj
+        
+        serializable_data = serialize_helper(farm_data)
+        return json.dumps(serializable_data, indent=2, default=str)
+    
     def _create_technical_analysis_prompt(self, farm_data: Dict[str, Any]) -> str:
         """Create detailed technical analysis prompt for Claude"""
         
@@ -179,7 +196,7 @@ ADVANCED SOIL HEALTH DIAGNOSTIC ANALYSIS
 You are conducting a detailed technical assessment using satellite-derived agricultural data. Apply advanced soil science principles and precision agriculture methodologies.
 
 FARM CONTEXT:
-{json.dumps(farm_data, indent=2)}
+{self._serialize_farm_data(farm_data)}
 
 DIAGNOSTIC FRAMEWORK:
 
@@ -290,18 +307,24 @@ Focus on actionable insights backed by agricultural science principles.
         Returns:
             Detailed soil health report with recommendations
         """
+        import time
         
-        logger.info(f"🔬 Starting advanced soil health analysis for farm ID: {farm_data.get('farm_id', 'unknown')}")
+        analysis_start = time.time()
+        farm_id = farm_data.get('farm_id', 'unknown')
+        logger.info(f"🔬 Starting advanced soil health analysis for farm ID: {farm_id}")
         
         try:
             soil_data = farm_data.get('soil_analysis', {})
             weather_data = farm_data.get('weather_data', {})
             
             # Calculate confidence score
+            conf_start = time.time()
             confidence_score = await self._calculate_confidence_score(soil_data, weather_data)
+            logger.info(f"📊 Confidence calculation completed in {time.time() - conf_start:.2f}s")
             
             # Step 1: Use Gemini for initial analysis with few-shot prompting
-            logger.info("📊 Performing initial analysis with Gemini...")
+            gemini_start = time.time()
+            logger.info("🤖 Performing initial analysis with Gemini...")
             few_shot_prompt = self._create_few_shot_prompt(farm_data)
             
             gemini_response = await self.ai_config.generate_with_gemini(
@@ -309,8 +332,11 @@ Focus on actionable insights backed by agricultural science principles.
                 max_tokens=1500,
                 temperature=0.3  # Lower temperature for more consistent analysis
             )
+            gemini_duration = time.time() - gemini_start
+            logger.info(f"🤖 Gemini analysis completed in {gemini_duration:.2f}s")
             
             # Step 2: Use Claude for deep technical analysis
+            claude_start = time.time()
             logger.info("🧠 Performing technical analysis with Claude...")
             technical_prompt = self._create_technical_analysis_prompt(farm_data)
             system_prompt = self._get_system_prompt()
@@ -322,20 +348,27 @@ Focus on actionable insights backed by agricultural science principles.
                 temperature=0.2,  # Very low temperature for technical analysis
                 model="claude-3-5-sonnet-20241022"
             )
+            claude_duration = time.time() - claude_start
+            logger.info(f"🧠 Claude analysis completed in {claude_duration:.2f}s")
             
             # Step 3: Parse and structure the results
+            processing_start = time.time()
             report = await self._process_ai_responses(
                 gemini_response, 
                 claude_response, 
                 farm_data, 
                 confidence_score
             )
+            processing_duration = time.time() - processing_start
             
-            logger.info("✅ Soil health analysis completed successfully")
+            total_duration = time.time() - analysis_start
+            logger.info(f"✅ Soil health analysis completed in {total_duration:.2f}s (Gemini: {gemini_duration:.2f}s, Claude: {claude_duration:.2f}s, Processing: {processing_duration:.2f}s)")
             return report
             
         except Exception as e:
-            logger.error(f"❌ Error in soil health analysis: {e}")
+            error_duration = time.time() - analysis_start
+            logger.error(f"❌ Error in soil health analysis after {error_duration:.2f}s: {e}")
+            logger.warning("🔄 Generating fallback soil health report")
             return await self._generate_fallback_report(farm_data)
     
     async def _process_ai_responses(
@@ -496,7 +529,9 @@ Focus on actionable insights backed by agricultural science principles.
         top_recommendations: List[Dict[str, Any]]
     ) -> str:
         """Generate farmer-friendly summary using Gemini"""
+        import time
         
+        summary_start = time.time()
         prompt = f"""
 Create a simple, friendly summary for a farmer about their soil health:
 
@@ -516,6 +551,9 @@ Use everyday language, avoid technical jargon, and be encouraging but honest.
             max_tokens=200,
             temperature=0.7
         )
+        
+        duration = time.time() - summary_start
+        logger.info(f"👨‍🌾 Farmer summary generated in {duration:.2f}s")
         
         return summary or f"Your soil health scores {score}/100 ({status}). Focus on the top recommendations to improve your farm's productivity."
     

@@ -21,7 +21,19 @@ class Settings(BaseSettings):
     GOOGLE_EARTH_ENGINE_PRIVATE_KEY: str = Field(default="", description="GEE private key")
     
     OPENWEATHER_API_KEY: str = Field(default="", description="OpenWeatherMap API key")
-    COMMODITIES_API_KEY: str = Field(default="", description="Commodities API key")
+    ALPHA_VANTAGE_API_KEY: str = Field(default="", description="Alpha Vantage API key")
+    COMMODITIES_API_KEY: str = Field(default="", description="Commodities API key (optional)")
+    GOOGLE_EARTH_ENGINE_PROJECT_ID: str = Field(default="", description="Google Earth Engine project ID")
+    
+    # Supabase Configuration (for backend auth validation)
+    SUPABASE_URL: str = Field(default="", description="Supabase project URL")
+    SUPABASE_SERVICE_KEY: str = Field(default="", description="Supabase service role key")
+    
+    # Optional configuration
+    SECRET_KEY: str = Field(default="dev-secret-key-change-in-production", description="Application secret key")
+    CORS_ORIGINS: str = Field(default="http://localhost:3000", description="CORS allowed origins")
+    DEBUG: str = Field(default="true", description="Debug mode")
+    NODE_ENV: str = Field(default="development", description="Node environment")
     
     # AI APIs
     GOOGLE_GEMINI_API_KEY: str = Field(default="", description="Google Gemini API key")
@@ -46,8 +58,9 @@ class Settings(BaseSettings):
     ENABLE_METRICS: bool = Field(default=True, description="Enable metrics collection")
     
     class Config:
-        env_file = ".env"
+        env_file = [".env", "../.env"]  # Check current dir first, then parent
         case_sensitive = True
+        extra = "ignore"  # Ignore extra environment variables
 
 # Create settings instance
 settings = Settings()

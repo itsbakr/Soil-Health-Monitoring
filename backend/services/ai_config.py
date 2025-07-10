@@ -28,7 +28,7 @@ class AIConfig:
         
         # Initialize Gemini (free tier for text generation)
         try:
-            gemini_api_key = os.getenv("GOOGLE_GEMINI_API_KEY")
+            gemini_api_key = settings.GOOGLE_GEMINI_API_KEY
             if gemini_api_key:
                 genai.configure(api_key=gemini_api_key)
                 self.gemini_client = genai.GenerativeModel('gemini-1.5-flash')
@@ -42,7 +42,7 @@ class AIConfig:
         
         # Initialize Claude (for reasoning tasks)
         try:
-            claude_api_key = os.getenv("ANTHROPIC_API_KEY")
+            claude_api_key = settings.ANTHROPIC_API_KEY
             if claude_api_key:
                 self.claude_client = Anthropic(api_key=claude_api_key)
                 self.claude_available = True

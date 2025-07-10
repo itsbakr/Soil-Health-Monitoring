@@ -74,6 +74,28 @@ class SatelliteData:
     pixel_count: int
     valid_pixels: int
     data_quality_score: float
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization"""
+        return {
+            'farm_id': self.farm_id,
+            'date_captured': self.date_captured.isoformat(),
+            'cloud_coverage': self.cloud_coverage,
+            'ndvi': self.ndvi,
+            'ndwi': self.ndwi,
+            'savi': self.savi,
+            'evi': self.evi,
+            'ndmi': self.ndmi,
+            'bsi': self.bsi,
+            'si': self.si,
+            'ci': self.ci,
+            'bi': self.bi,
+            'surface_temperature': self.surface_temperature,
+            'moisture_estimate': self.moisture_estimate,
+            'pixel_count': self.pixel_count,
+            'valid_pixels': self.valid_pixels,
+            'data_quality_score': self.data_quality_score
+        }
 
 
 class SatelliteService:
@@ -87,15 +109,45 @@ class SatelliteService:
     def _setup_earth_engine(self):
         """Initialize Google Earth Engine authentication"""
         try:
-            # Try to initialize EE with existing credentials
-            ee.Initialize()
-            self.initialized = True
-            logger.info("Google Earth Engine initialized successfully")
+            # First, try using service account JSON file (preferred method)
+            service_account_file = "ee_sa.json"
+            if os.path.exists(service_account_file):
+                logger.info("Found service account file, initializing Google Earth Engine...")
+                credentials = ee.ServiceAccountCredentials(
+                    None,  # Email will be read from JSON file
+                    key_file=service_account_file
+                )
+                ee.Initialize(credentials, project="land-degradation-soil-moisture")
+                self.initialized = True
+                logger.info("✅ Google Earth Engine initialized with service account from JSON file")
+                return
+            
+            # Fallback to environment variables
+            from config import settings
+            service_account_email = settings.GOOGLE_EARTH_ENGINE_SERVICE_ACCOUNT
+            private_key = settings.GOOGLE_EARTH_ENGINE_PRIVATE_KEY
+            project_id = settings.GOOGLE_EARTH_ENGINE_PROJECT_ID or 'land-degradation-soil-moisture'
+            
+            if service_account_email and private_key:
+                logger.info("Initializing Google Earth Engine with service account from env vars...")
+                private_key_data = private_key.replace('\\n', '\n')  # Handle escaped newlines
+                credentials = ee.ServiceAccountCredentials(
+                    email=service_account_email,
+                    key_data=private_key_data
+                )
+                ee.Initialize(credentials, project=project_id)
+                self.initialized = True
+                logger.info("✅ Google Earth Engine initialized with service account from env vars")
+            else:
+                # Try default authentication (for development)
+                logger.info("Attempting default Google Earth Engine authentication...")
+                ee.Initialize()
+                self.initialized = True
+                logger.info("✅ Google Earth Engine initialized with default credentials")
+                
         except Exception as e:
             logger.warning(f"EE initialization failed: {e}")
             logger.info("Google Earth Engine not available - service will use demo data")
-            # Don't attempt authentication during service startup
-            # This allows the service to start even without EE credentials
             self.initialized = False
     
     def _authenticate_service_account(self):

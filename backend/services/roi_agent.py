@@ -163,6 +163,23 @@ OUTPUT REQUIREMENTS:
 - Consider both short-term ROI and long-term sustainability
 - Use farmer-friendly explanations alongside technical analysis"""
 
+    def _serialize_farm_data(self, farm_data: Dict[str, Any]) -> str:
+        """Safely serialize farm data to JSON, handling SatelliteData objects"""
+        from services.satellite_service import SatelliteData
+        
+        def serialize_helper(obj):
+            if hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            elif isinstance(obj, dict):
+                return {k: serialize_helper(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [serialize_helper(item) for item in obj]
+            else:
+                return obj
+        
+        serializable_data = serialize_helper(farm_data)
+        return json.dumps(serializable_data, indent=2, default=str)
+
     def _create_comprehensive_analysis_prompt(
         self, 
         farm_data: Dict[str, Any],
@@ -176,20 +193,20 @@ OUTPUT REQUIREMENTS:
 COMPREHENSIVE ROI ANALYSIS AND CROP RECOMMENDATION
 
 FARM CONTEXT:
-{json.dumps(farm_data, indent=2)}
+{self._serialize_farm_data(farm_data)}
 
 SOIL HEALTH ASSESSMENT:
 Overall Score: {soil_health_report.overall_score}/100
 Health Status: {soil_health_report.health_status}
-Key Indicators: {json.dumps(soil_health_report.key_indicators, indent=2)}
-Deficiencies: {json.dumps(soil_health_report.deficiencies, indent=2)}
+Key Indicators: {json.dumps(soil_health_report.key_indicators, indent=2, default=str)}
+Deficiencies: {json.dumps(soil_health_report.deficiencies, indent=2, default=str)}
 Confidence: {soil_health_report.confidence_score:.2f}
 
 MARKET CONDITIONS:
-{json.dumps(market_data, indent=2)}
+{json.dumps(market_data, indent=2, default=str)}
 
 WEATHER CONTEXT:
-{json.dumps(weather_data, indent=2)}
+{json.dumps(weather_data, indent=2, default=str)}
 
 ANALYSIS REQUIREMENTS:
 
@@ -317,10 +334,10 @@ Provide clear interpretation of results for decision-making.
 MULTI-CRITERIA DECISION MATRIX ANALYSIS
 
 CROP OPTIONS ANALYSIS:
-{json.dumps(crop_analyses, indent=2)}
+{json.dumps(crop_analyses, indent=2, default=str)}
 
 DECISION CRITERIA AND WEIGHTS:
-{json.dumps(weights, indent=2)}
+{json.dumps(weights, indent=2, default=str)}
 
 ANALYSIS FRAMEWORK:
 

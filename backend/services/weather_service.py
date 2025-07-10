@@ -75,7 +75,8 @@ class WeatherService:
     
     def __init__(self):
         """Initialize the weather service"""
-        self.api_key = os.getenv('OPENWEATHERMAP_API_KEY')
+        from config import settings
+        self.api_key = settings.OPENWEATHER_API_KEY
         self.owm = None
         self.initialized = False
         self._setup_weather_api()
