@@ -1,4 +1,4 @@
-# LARMMS - Soil Health Monitoring & Agricultural ROI Platform
+# SoilGuard - Soil Health Monitoring & Agricultural ROI Platform
 
 A comprehensive agricultural platform that combines satellite data analysis, weather monitoring, and market intelligence to help farmers optimize soil health and maximize ROI through data-driven decision making.
 
