@@ -10,7 +10,7 @@ export default function HomePage() {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-2">
               <Leaf className="h-8 w-8 text-crop-600" />
-              <span className="text-xl font-bold text-gray-900">Soil Health Monitor</span>
+              <span className="text-xl font-bold text-gray-900">SoilGuard</span>
             </div>
             <div className="flex items-center space-x-4">
               <Link href="/auth/login" className="btn-secondary">
@@ -110,7 +110,7 @@ export default function HomePage() {
           <div className="text-center">
             <div className="flex items-center justify-center space-x-2 mb-4">
               <Leaf className="h-6 w-6 text-crop-400" />
-              <span className="text-lg font-semibold">Soil Health Monitor</span>
+              <span className="text-lg font-semibold">SoilGuard</span>
             </div>
             <p className="text-gray-400">
               Empowering farmers with satellite technology and AI insights

@@ -258,8 +258,28 @@ ANALYSIS REQUIREMENTS:
    - Monitoring and adjustment protocols
    - Risk mitigation measures
 
-Use quantitative analysis throughout. Show all calculations and assumptions clearly.
-Provide confidence levels for each major conclusion.
+DELIVERABLE REQUIREMENTS:
+1. EXECUTIVE SUMMARY: Key findings and top recommendation in 3-4 sentences
+2. QUANTITATIVE PROJECTIONS: Specific numbers with confidence intervals
+3. RISK ASSESSMENT: Probability-weighted scenario analysis
+4. IMPLEMENTATION ROADMAP: Detailed timeline with milestones
+5. MONITORING METRICS: KPIs and success indicators
+6. FARMER GUIDANCE: Plain-language explanation and action steps
+
+OUTPUT STRUCTURE:
+- Use numerical data and statistical analysis throughout
+- Show all calculations and assumptions clearly
+- Provide confidence levels (%) for each major conclusion
+- Include uncertainty ranges for financial projections
+- Specify data sources and methodology limitations
+- Give actionable, time-bound recommendations
+
+FORMATTING REQUIREMENTS:
+- Use bullet points for lists
+- Include specific dollar amounts and percentages
+- Provide timelines in days/months/years
+- Rank recommendations by priority (High/Medium/Low)
+- Include risk mitigation strategies for each recommendation
 """
 
     def _create_monte_carlo_prompt(self, top_crops: List[str], farm_data: Dict[str, Any]) -> str:

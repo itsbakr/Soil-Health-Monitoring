@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { InteractiveMapWrapper } from './InteractiveMap'
+import { ClickableMapWrapper } from './ClickableMap'
 
 interface FarmLocationSelectorProps {
   onLocationSelect: (lat: number, lng: number) => void
@@ -222,25 +224,25 @@ export default function FarmLocationSelector({ onLocationSelect, selectedLocatio
         </div>
       )}
 
-      {/* Map Placeholder */}
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-white">
-        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m0 0L9 7" />
-        </svg>
-        <h3 className="mt-2 text-sm font-medium text-gray-900">Interactive Map</h3>
-        <p className="mt-1 text-sm text-gray-500">
-          {selectedLocation 
-            ? `Farm location pinned at ${getLocationName(selectedLocation.lat, selectedLocation.lng)}`
-            : 'Use the location button above or enter coordinates manually'
-          }
-        </p>
-        {selectedLocation && (
-                       <div className="mt-4 p-3 bg-soil-50 rounded-md">
-               <p className="text-xs text-soil-700">
-              📍 Farm coordinates: {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
-            </p>
-          </div>
-        )}
+            {/* Interactive Map */}
+      <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+        <div className="p-3 bg-gray-50 border-b border-gray-200">
+          <h4 className="text-sm font-medium text-gray-700">Farm Location Preview</h4>
+          <p className="text-xs text-gray-500 mt-1">
+            {selectedLocation 
+              ? `Farm location: ${getLocationName(selectedLocation.lat, selectedLocation.lng)}`
+              : 'Select coordinates to see location on map'
+            }
+          </p>
+        </div>
+        
+        <div className="relative">
+          <ClickableMapWrapper
+            selectedLocation={selectedLocation}
+            onLocationSelect={onLocationSelect}
+            className="h-64 w-full relative"
+          />
+        </div>
       </div>
 
       {/* Helpful Tips */}
@@ -252,6 +254,7 @@ export default function FarmLocationSelector({ onLocationSelect, selectedLocatio
           <div className="text-sm text-blue-700">
             <p className="font-medium mb-1">Tips for accurate location:</p>
             <ul className="text-xs space-y-1">
+              <li>• Click anywhere on the map to pin your farm location</li>
               <li>• Use "Current Location" if you're at the farm site</li>
               <li>• For manual entry, use GPS coordinates from your mapping app</li>
               <li>• Coordinates should point to the center of your farm area</li>

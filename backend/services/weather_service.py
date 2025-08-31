@@ -89,6 +89,11 @@ class WeatherService:
                 self.initialized = False
                 return
             
+            # Clean and validate API key
+            self.api_key = self.api_key.strip()
+            logger.info(f"🔑 Weather API key length: {len(self.api_key)}")
+            logger.info(f"🔑 Weather API key starts with: {self.api_key[:8]}...")
+            
             self.owm = OWM(self.api_key)
             
             # Test the API connection
@@ -100,7 +105,7 @@ class WeatherService:
             logger.info("OpenWeatherMap API initialized successfully")
             
         except UnauthorizedError:
-            logger.error("Invalid OpenWeatherMap API key")
+            logger.error(f"Invalid OpenWeatherMap API key - key length: {len(self.api_key) if self.api_key else 0}")
             self.initialized = False
         except Exception as e:
             logger.warning(f"Weather API initialization failed: {e}")
@@ -194,7 +199,7 @@ class WeatherService:
             # Get forecast from API (free tier allows 5 days)
             forecast_days = min(days, 5)
             mgr = self.owm.weather_manager()
-            forecast = mgr.forecast_at_coords(latitude, longitude, '3h')
+            forecast = mgr.forecast_at_coords(latitude, longitude, "3h")
             
             # Process forecast data
             daily_forecasts = []
@@ -202,7 +207,7 @@ class WeatherService:
             daily_data = {}
             
             for weather in forecast.forecast:
-                forecast_time = weather.reference_time('datetime')
+                forecast_time = weather.reference_time('date')
                 forecast_date = forecast_time.date()
                 
                 if current_date != forecast_date:

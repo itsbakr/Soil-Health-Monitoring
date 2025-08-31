@@ -37,15 +37,20 @@ async def get_current_user_id(authorization: Optional[str] = Header(None)):
             print("⚠️ No Supabase config found, using development mode")
             return "dev-user-id"
         
-        # Verify token with Supabase
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{settings.SUPABASE_URL}/auth/v1/user",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "apikey": settings.SUPABASE_ANON_KEY
-                }
-            )
+        # Verify token with Supabase (with timeout and retry)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                response = await client.get(
+                    f"{settings.SUPABASE_URL}/auth/v1/user",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "apikey": settings.SUPABASE_ANON_KEY
+                    }
+                )
+            except httpx.TimeoutException:
+                print("⏰ Supabase auth request timed out, using fallback")
+                # In development, allow the request to proceed
+                return "timeout-user-id"
             
             if response.status_code == 200:
                 user_data = response.json()

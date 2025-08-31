@@ -298,17 +298,17 @@ class CropPriceService:
             if not api_key:
                 return None
             
-            # Alpha Vantage commodity symbols mapping
+            # Alpha Vantage commodity symbols mapping (using futures symbols)
             commodity_symbols = {
-                "corn": "CORN",
-                "soybeans": "SOYBEAN", 
-                "wheat": "WHEAT",
-                "coffee": "COFFEE",
-                "sugar": "SUGAR",
-                "cotton": "COTTON",
-                "cattle": "CATTLE",
-                "oil": "CRUDE_OIL",
-                "natural_gas": "NATURAL_GAS"
+                "corn": "ZC=F",  # Corn futures
+                "soybeans": "ZS=F",  # Soybean futures
+                "wheat": "ZW=F",  # Wheat futures  
+                "coffee": "KC=F",  # Coffee futures
+                "sugar": "SB=F",  # Sugar futures
+                "cotton": "CT=F",  # Cotton futures
+                "cattle": "LC=F",  # Live cattle futures
+                "oil": "CRUDE_OIL",  # Use WTI function
+                "natural_gas": "NATURAL_GAS"  # Use separate function
             }
             
             symbol = commodity_symbols.get(crop_type.lower())
@@ -316,18 +316,19 @@ class CropPriceService:
                 logger.warning(f"No Alpha Vantage symbol mapping for crop: {crop_type}")
                 return None
             
-            # Alpha Vantage commodities endpoint
+            # Alpha Vantage commodities endpoint - using TIME_SERIES_DAILY for commodities
             url = f"https://www.alphavantage.co/query"
             params = {
-                "function": "WTI",  # For commodities
-                "interval": "daily",
-                "apikey": api_key
+                "function": "TIME_SERIES_DAILY",
+                "symbol": f"{symbol}",  # Use commodity symbol
+                "apikey": api_key,
+                "outputsize": "compact"
             }
             
-            # For agricultural commodities, use different endpoint
-            if symbol in ["CORN", "SOYBEAN", "WHEAT", "COFFEE", "SUGAR", "COTTON"]:
-                params["function"] = "COMMODITY_CHANNEL_INDEX"
-                params["symbol"] = symbol
+            # For energy commodities, use different function
+            if symbol in ["CRUDE_OIL", "NATURAL_GAS"]:
+                params["function"] = "WTI"  # For oil
+                del params["symbol"]  # WTI doesn't need symbol
             
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(url, params=params)
@@ -343,15 +344,34 @@ class CropPriceService:
                     logger.warning(f"Alpha Vantage API info: {data['Information']}")
                     return None
                 
-                # Parse the response (structure varies by commodity)
-                if "data" in data and data["data"]:
+                # Parse the response based on function used
+                if "Time Series (Daily)" in data:
+                    time_series = data["Time Series (Daily)"]
+                    if time_series:
+                        # Get the most recent date
+                        latest_date = max(time_series.keys())
+                        latest_data = time_series[latest_date]
+                        price = float(latest_data.get("4. close", 0))
+                        
+                        return CropPrice(
+                            crop_type=crop_type,
+                            price=price,
+                            unit="USD/unit",
+                            currency="USD",
+                            market=f"Alpha Vantage ({region})",
+                            timestamp=datetime.utcnow(),
+                            change_24h=None,
+                            volume=float(latest_data.get("5. volume", 0))
+                        )
+                elif "data" in data and data["data"]:
+                    # For WTI oil data
                     latest_data = data["data"][0] if isinstance(data["data"], list) else data["data"]
                     price = float(latest_data.get("value", 0))
                     
                     return CropPrice(
                         crop_type=crop_type,
                         price=price,
-                        unit="USD/unit",
+                        unit="USD/barrel",
                         currency="USD",
                         market=f"Alpha Vantage ({region})",
                         timestamp=datetime.utcnow(),
@@ -359,7 +379,7 @@ class CropPriceService:
                         volume=None
                     )
                 
-                logger.warning(f"Unexpected Alpha Vantage response structure for {crop_type}")
+                logger.warning(f"Unexpected Alpha Vantage response structure for {crop_type}: {list(data.keys())}")
                 return None
                 
         except Exception as e:

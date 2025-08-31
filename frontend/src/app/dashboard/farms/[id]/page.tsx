@@ -8,6 +8,7 @@ import type { Database } from '@/lib/supabase'
 import { runCompleteAnalysis, analyzeSoilHealth, analyzeROI, pollAnalysisStatus, getSoilHealthReport, getROIReport, SoilHealthReport, ROIAnalysisReport } from '@/lib/api'
 import SoilHealthDisplay from '@/components/Analysis/SoilHealthDisplay'
 import ROIDisplay from '@/components/Analysis/ROIDisplay'
+import { InteractiveMapWrapper } from '@/components/Map/InteractiveMap'
 
 type Farm = Database['public']['Tables']['farms']['Row']
 
@@ -486,17 +487,75 @@ export default function FarmDetailPage({ params }: FarmDetailPageProps) {
             </div>
             <div className="border-t border-gray-200">
               <div className="p-6">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
-                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m0 0L9 7" />
-                  </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">Interactive Map</h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Coordinates: {farm.location_lat.toFixed(6)}, {farm.location_lng.toFixed(6)}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    Interactive map visualization will be available in future updates
-                  </p>
+                <div className="space-y-4">
+                  {/* Map Controls */}
+                  <div className="flex flex-wrap items-center justify-between bg-gray-50 p-3 rounded-lg">
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <span>
+                        <strong>Coordinates:</strong> {farm.location_lat.toFixed(6)}, {farm.location_lng.toFixed(6)}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                      </svg>
+                      <span>
+                        <strong>Area:</strong> {farm.area_hectares} hectares
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Interactive Map */}
+                  <InteractiveMapWrapper
+                    latitude={farm.location_lat}
+                    longitude={farm.location_lng}
+                    farmName={farm.name}
+                    area={farm.area_hectares}
+                    cropType={farm.crop_type}
+                    className="h-80 w-full rounded-lg shadow-lg border"
+                  />
+
+                  {/* Quick Actions */}
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href={`https://www.google.com/maps?q=${farm.location_lat},${farm.location_lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-soil-500"
+                    >
+                      <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      Open in Google Maps
+                    </a>
+                    <a
+                      href={`https://earth.google.com/web/@${farm.location_lat},${farm.location_lng},1000a,2000d/data=CgIgAQ`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-soil-500"
+                    >
+                      <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      View in Google Earth
+                    </a>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${farm.location_lat}, ${farm.location_lng}`)
+                        // You could add a toast notification here
+                      }}
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-soil-500"
+                    >
+                      <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v6a2 2 0 002 2h2m0 0h2m0 0h2a2 2 0 002-2V7a2 2 0 00-2-2h-2m0 0V3a2 2 0 012-2h2a2 2 0 012 2v2M8 5a2 2 0 012-2h2a2 2 0 012 2v2m0 0v6a2 2 0 01-2 2h-2a2 2 0 01-2-2V7m0 0V5a2 2 0 012-2h2a2 2 0 012 2v2" />
+                      </svg>
+                      Copy Coordinates
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

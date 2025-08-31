@@ -30,6 +30,11 @@ class AIConfig:
         try:
             gemini_api_key = settings.GOOGLE_GEMINI_API_KEY
             if gemini_api_key:
+                # Clean and validate API key
+                gemini_api_key = gemini_api_key.strip()
+                logger.info(f"🔑 Gemini API key length: {len(gemini_api_key)}")
+                logger.info(f"🔑 Gemini API key starts with: {gemini_api_key[:10]}...")
+                
                 genai.configure(api_key=gemini_api_key)
                 self.gemini_client = genai.GenerativeModel('gemini-1.5-flash')
                 self.gemini_available = True
@@ -44,6 +49,11 @@ class AIConfig:
         try:
             claude_api_key = settings.ANTHROPIC_API_KEY
             if claude_api_key:
+                # Clean and validate API key
+                claude_api_key = claude_api_key.strip()
+                logger.info(f"🔑 Claude API key length: {len(claude_api_key)}")
+                logger.info(f"🔑 Claude API key starts with: {claude_api_key[:10]}...")
+                
                 self.claude_client = Anthropic(api_key=claude_api_key)
                 self.claude_available = True
                 logger.info("✅ Claude API initialized successfully")
@@ -66,6 +76,10 @@ class AIConfig:
             return None
         
         try:
+            # Log API key info for debugging
+            current_key = settings.GOOGLE_GEMINI_API_KEY.strip() if settings.GOOGLE_GEMINI_API_KEY else ""
+            logger.info(f"🔧 Making Gemini API call with key length: {len(current_key)}")
+            
             response = await self.gemini_client.generate_content_async(
                 prompt,
                 generation_config=genai.types.GenerationConfig(
@@ -76,6 +90,7 @@ class AIConfig:
             return response.text
         except Exception as e:
             logger.error(f"Error generating with Gemini: {e}")
+            logger.error(f"🔍 Gemini API key being used: {settings.GOOGLE_GEMINI_API_KEY[:10] if settings.GOOGLE_GEMINI_API_KEY else 'None'}...")
             return None
     
     async def generate_with_claude(
@@ -93,6 +108,10 @@ class AIConfig:
             return None
         
         try:
+            # Log API key info for debugging
+            current_key = settings.ANTHROPIC_API_KEY.strip() if settings.ANTHROPIC_API_KEY else ""
+            logger.info(f"🔧 Making Claude API call with key length: {len(current_key)}")
+            
             messages = [{"role": "user", "content": prompt}]
             
             kwargs = {
@@ -109,6 +128,7 @@ class AIConfig:
             return response.content[0].text
         except Exception as e:
             logger.error(f"Error generating with Claude: {e}")
+            logger.error(f"🔍 Claude API key being used: {settings.ANTHROPIC_API_KEY[:10] if settings.ANTHROPIC_API_KEY else 'None'}...")
             return None
     
     def get_status(self) -> Dict[str, Any]:

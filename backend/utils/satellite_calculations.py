@@ -9,6 +9,7 @@ import math
 from typing import List, Tuple, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
+import ee
 
 
 @dataclass
@@ -312,3 +313,79 @@ def calculate_temporal_variance(values: List[float]) -> Dict[str, float]:
         "std_dev": round(std_dev, 3),
         "stability": round(stability, 1)
     } 
+
+def add_ndvi(image: ee.Image) -> ee.Image:
+    """Add NDVI band to image (NIR - Red) / (NIR + Red)"""
+    nir = image.select('SR_B5')
+    red = image.select('SR_B4')
+    ndvi_numerator = nir.subtract(red)
+    ndvi_denominator = nir.add(red)
+    ndvi_safe = ndvi_denominator.where(ndvi_denominator.eq(0), 1)
+    ndvi = ndvi_numerator.divide(ndvi_safe).rename('NDVI')
+    ndvi = ndvi.updateMask(ndvi_denominator.neq(0))
+    return image.addBands(ndvi)
+
+def add_ndwi(image: ee.Image) -> ee.Image:
+    """Add NDWI band to image (Green - NIR) / (Green + NIR)"""
+    green = image.select('SR_B3')
+    nir = image.select('SR_B5')
+    ndwi = green.subtract(nir).divide(green.add(nir)).rename('NDWI')
+    return image.addBands(ndwi)
+
+def add_savi(image: ee.Image, L: float = 0.5) -> ee.Image:
+    """Add SAVI band to image ((NIR - Red) / (NIR + Red + L)) * (1 + L)"""
+    nir = image.select('SR_B5')
+    red = image.select('SR_B4')
+    savi = nir.subtract(red).divide(nir.add(red).add(L)).multiply(1 + L).rename('SAVI')
+    return image.addBands(savi)
+
+def add_evi(image: ee.Image) -> ee.Image:
+    """Add EVI band to image (NIR - Red) / (NIR + 6*Red - 7.5*Blue + 1) * 2.5"""
+    nir = image.select('SR_B5')
+    red = image.select('SR_B4')
+    blue = image.select('SR_B2')
+    evi = nir.subtract(red).divide(
+        nir.add(red.multiply(6)).subtract(blue.multiply(7.5)).add(1)
+    ).multiply(2.5).rename('EVI')
+    return image.addBands(evi)
+
+def add_ndmi(image: ee.Image) -> ee.Image:
+    """Add NDMI band to image (NIR - SWIR1) / (NIR + SWIR1)"""
+    nir = image.select('SR_B5')
+    swir1 = image.select('SR_B6')
+    ndmi = nir.subtract(swir1).divide(nir.add(swir1)).rename('NDMI')
+    return image.addBands(ndmi)
+
+def add_bsi(image: ee.Image) -> ee.Image:
+    """Add BSI band to image ((SWIR1 + Red) - (NIR + Blue)) / ((SWIR1 + Red) + (NIR + Blue))"""
+    swir1 = image.select('SR_B6')
+    red = image.select('SR_B4')
+    nir = image.select('SR_B5')
+    blue = image.select('SR_B2')
+    bsi = swir1.add(red).subtract(nir).subtract(blue).divide(
+        swir1.add(red).add(nir).add(blue)
+    ).rename('BSI')
+    return image.addBands(bsi)
+
+def add_si(image: ee.Image) -> ee.Image:
+    """Add SI (Salinity Index) band to image (Green * Red) / Blue"""
+    green = image.select('SR_B3')
+    red = image.select('SR_B4')
+    blue = image.select('SR_B2')
+    si = green.multiply(red).divide(blue).rename('SI')
+    return image.addBands(si)
+
+def add_ci(image: ee.Image) -> ee.Image:
+    """Add CI (Coloration Index) band to image (Red - Green) / (Red + Green)"""
+    red = image.select('SR_B4')
+    green = image.select('SR_B3')
+    ci = red.subtract(green).divide(red.add(green)).rename('CI')
+    return image.addBands(ci)
+
+def add_bi(image: ee.Image) -> ee.Image:
+    """Add BI (Brightness Index) band to image (Blue + Green + Red) / 3"""
+    blue = image.select('SR_B2')
+    green = image.select('SR_B3')
+    red = image.select('SR_B4')
+    bi = blue.add(green).add(red).divide(3).rename('BI')
+    return image.addBands(bi) 

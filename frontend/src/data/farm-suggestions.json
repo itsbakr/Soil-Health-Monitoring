@@ -1,0 +1,134 @@
+{
+  "farm_suggestions": [
+    {
+      "name": "Golden Prairie Farm",
+      "description": "Premium Midwest farmland with excellent soil conditions",
+      "coordinates": {
+        "latitude": 41.8781,
+        "longitude": -87.6298
+      },
+      "parameters": {
+        "size_acres": 250,
+        "soil_type": "Mollisols",
+        "current_crop": "Corn",
+        "irrigation": "Center pivot",
+        "tillage_practice": "No-till",
+        "organic_matter": 3.8,
+        "ph_level": 6.8,
+        "previous_crops": ["Soybeans", "Wheat"],
+        "fertilizer_history": "Balanced NPK application",
+        "cover_crops": "Winter rye"
+      },
+      "expected_soil_health": "Excellent (85-95)",
+      "region": "Midwest Corn Belt"
+    },
+    {
+      "name": "Central Valley Orchard",
+      "description": "California's fertile agricultural heartland",
+      "coordinates": {
+        "latitude": 36.7783,
+        "longitude": -119.4179
+      },
+      "parameters": {
+        "size_acres": 200,
+        "soil_type": "Alfisols",
+        "current_crop": "Almonds",
+        "irrigation": "Drip irrigation",
+        "tillage_practice": "Conservation tillage",
+        "organic_matter": 2.5,
+        "ph_level": 7.2,
+        "previous_crops": ["Alfalfa", "Cotton"],
+        "fertilizer_history": "Organic amendments",
+        "cover_crops": "Legume mix"
+      },
+      "expected_soil_health": "Good (75-85)",
+      "region": "California Central Valley"
+    },
+    {
+      "name": "Black Gold Acres",
+      "description": "Iowa's premium black soil farmland",
+      "coordinates": {
+        "latitude": 41.8781,
+        "longitude": -93.0977
+      },
+      "parameters": {
+        "size_acres": 300,
+        "soil_type": "Mollisols",
+        "current_crop": "Soybeans",
+        "irrigation": "Rain-fed",
+        "tillage_practice": "Strip-till",
+        "organic_matter": 4.2,
+        "ph_level": 6.5,
+        "previous_crops": ["Corn", "Oats"],
+        "fertilizer_history": "Precision agriculture",
+        "cover_crops": "Cereal rye"
+      },
+      "expected_soil_health": "Excellent (90-100)",
+      "region": "Iowa Farmland"
+    },
+    {
+      "name": "Red River Valley Farm",
+      "description": "Minnesota's fertile valley with rich soil",
+      "coordinates": {
+        "latitude": 46.8772,
+        "longitude": -96.7898
+      },
+      "parameters": {
+        "size_acres": 180,
+        "soil_type": "Mollisols",
+        "current_crop": "Sugar Beets",
+        "irrigation": "Furrow irrigation",
+        "tillage_practice": "Reduced tillage",
+        "organic_matter": 3.5,
+        "ph_level": 7.0,
+        "previous_crops": ["Wheat", "Corn"],
+        "fertilizer_history": "Soil test based",
+        "cover_crops": "Annual ryegrass"
+      },
+      "expected_soil_health": "Very Good (80-90)",
+      "region": "Red River Valley"
+    },
+    {
+      "name": "Texas Blackland Prairie",
+      "description": "Texas blackland prairie with deep, fertile soil",
+      "coordinates": {
+        "latitude": 31.9686,
+        "longitude": -99.9018
+      },
+      "parameters": {
+        "size_acres": 150,
+        "soil_type": "Vertisols",
+        "current_crop": "Cotton",
+        "irrigation": "Center pivot",
+        "tillage_practice": "No-till",
+        "organic_matter": 2.8,
+        "ph_level": 7.5,
+        "previous_crops": ["Sorghum", "Wheat"],
+        "fertilizer_history": "Variable rate application",
+        "cover_crops": "Hairy vetch"
+      },
+      "expected_soil_health": "Good (70-80)",
+      "region": "Texas Blackland Prairie"
+    }
+  ],
+  "soil_health_tips": {
+    "excellent_soil_indicators": [
+      "Organic matter content > 3%",
+      "pH between 6.0-7.5",
+      "Good soil structure and aggregation",
+      "High biological activity",
+      "Balanced nutrient levels",
+      "Good water infiltration",
+      "Minimal erosion"
+    ],
+    "improvement_practices": [
+      "Implement no-till or reduced tillage",
+      "Use cover crops year-round",
+      "Apply organic amendments",
+      "Practice crop rotation",
+      "Maintain soil cover",
+      "Use precision agriculture",
+      "Monitor soil health regularly"
+    ]
+  }
+} 

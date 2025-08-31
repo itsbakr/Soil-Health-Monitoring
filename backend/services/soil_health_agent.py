@@ -159,14 +159,48 @@ ANALYSIS REQUIRED:
 Provide a comprehensive soil health assessment following the same format as the examples above. Include:
 
 1. QUANTITATIVE ANALYSIS: Score each indicator and explain its implications
-2. OVERALL SCORE: 0-100 with clear justification
-3. HEALTH STATUS: Excellent/Good/Fair/Poor/Critical
-4. CONFIDENCE SCORE: How certain are you of this assessment? (0-100%)
-5. KEY DEFICIENCIES: What are the main problems?
-6. SPECIFIC RECOMMENDATIONS: Prioritized action items with costs and timeline
-7. FARMER EXPLANATION: Simple, practical explanation for non-technical users
+   - NDVI analysis with vegetation health implications
+   - pH assessment and nutrient availability impact
+   - Moisture content evaluation and irrigation needs
+   - Salinity levels and crop tolerance considerations
+   - Temperature analysis and seasonal impacts
 
-Use chain-of-thought reasoning - show your step-by-step analysis process."""
+2. OVERALL SCORE: 0-100 with clear justification and breakdown
+   - Show calculation methodology
+   - Weight different factors appropriately
+   - Explain score components
+
+3. HEALTH STATUS: Excellent/Good/Fair/Poor/Critical with reasoning
+
+4. CONFIDENCE SCORE: How certain are you of this assessment? (0-100%)
+   - Data quality assessment
+   - Measurement limitations
+   - Validation factors
+
+5. KEY DEFICIENCIES: What are the main problems?
+   - Priority ranking (High/Medium/Low)
+   - Impact assessment on productivity
+   - Interconnected soil issues
+
+6. SPECIFIC RECOMMENDATIONS: Prioritized action items with costs and timeline
+   - Immediate actions (next 30 days)
+   - Short-term improvements (3-6 months)
+   - Long-term management (1-3 years)
+   - Cost-benefit analysis for each recommendation
+
+7. FARMER EXPLANATION: Simple, practical explanation for non-technical users
+   - What the numbers mean in practical terms
+   - Priority actions in everyday language
+   - Expected outcomes and timeline
+
+8. TECHNICAL INSIGHTS: Scientific analysis for agricultural professionals
+   - Detailed methodology and data sources
+   - Statistical confidence intervals
+   - Precision agriculture recommendations
+   - Monitoring protocols
+
+Use chain-of-thought reasoning - show your step-by-step analysis process.
+Provide specific numerical values and clear actionable guidance."""
 
         return prompt
 
@@ -241,14 +275,23 @@ Use step-by-step analytical reasoning:
 
 OUTPUT FORMAT:
 Provide structured technical analysis with:
-- Detailed scientific assessment
-- Statistical confidence measures
-- Risk quantification
-- Solution prioritization matrix
-- Implementation timeline recommendations
-- Monitoring and validation protocols
+- Detailed scientific assessment with quantitative analysis
+- Statistical confidence measures and data quality indicators
+- Risk quantification with probability assessments
+- Solution prioritization matrix with cost-benefit ratios
+- Implementation timeline recommendations with milestone tracking
+- Monitoring and validation protocols with KPIs
+
+SPECIFIC DELIVERABLES:
+1. EXECUTIVE SUMMARY: 2-3 sentences highlighting key findings and priority actions
+2. QUANTITATIVE ASSESSMENT: Numerical scoring with methodology explanation
+3. RISK ANALYSIS: Probability-based assessment of soil degradation risks
+4. ACTIONABLE RECOMMENDATIONS: Specific, measurable, time-bound actions
+5. MONITORING FRAMEWORK: Metrics and measurement protocols
+6. COST-BENEFIT ANALYSIS: ROI estimates for recommended interventions
 
 Focus on actionable insights backed by agricultural science principles.
+Provide specific numerical targets and measurable outcomes.
 """
 
     async def _calculate_confidence_score(
@@ -566,25 +609,28 @@ Use everyday language, avoid technical jargon, and be encouraging but honest.
         
         # Simple rule-based assessment
         indicators = []
-        score = 70.0  # Default moderate score
+        score = 65.0  # Use consistent default score that matches logs
         
         if soil_data.get('ndvi', 0) > 0.6:
             indicators.append("Good vegetation health")
             score += 10
         else:
             indicators.append("Vegetation needs attention")
-            score -= 10
+            score -= 5
             
         if 6.0 <= soil_data.get('ph_estimate', 7.0) <= 7.5:
             indicators.append("Optimal soil pH")
             score += 5
         else:
             indicators.append("pH adjustment recommended")
-            score -= 5
+            score -= 3
+        
+        final_score = max(0, min(100, score))
+        logger.info(f"🔢 Fallback analysis generated score: {final_score}")
         
         return SoilHealthReport(
-            overall_score=max(0, min(100, score)),
-            health_status=self._determine_health_status(score),
+            overall_score=final_score,
+            health_status=self._determine_health_status(final_score),
             confidence_score=0.6,  # Lower confidence for fallback
             key_indicators=self._extract_key_indicators(farm_data),
             deficiencies=[],

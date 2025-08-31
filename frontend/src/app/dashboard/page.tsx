@@ -90,7 +90,7 @@ export default function DashboardPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a4 4 0 004-4V5z" />
                 </svg>
               </div>
-              <h1 className="ml-3 text-2xl font-bold text-gray-900">LARMMS Dashboard</h1>
+              <h1 className="ml-3 text-2xl font-bold text-gray-900">SoilGuard Dashboard</h1>
             </div>
             
             <div className="flex items-center space-x-4">
