@@ -36,9 +36,9 @@ class AIConfig:
                 logger.info(f"🔑 Gemini API key starts with: {gemini_api_key[:10]}...")
                 
                 genai.configure(api_key=gemini_api_key)
-                self.gemini_client = genai.GenerativeModel('gemini-1.5-flash')
+                self.gemini_client = genai.GenerativeModel('gemini-flash-latest')
                 self.gemini_available = True
-                logger.info("✅ Gemini API initialized successfully")
+                logger.info("✅ Gemini API initialized with gemini-flash-latest")
             else:
                 logger.warning("⚠️ GOOGLE_GEMINI_API_KEY not found - using demo mode")
         except Exception as e:
@@ -99,7 +99,7 @@ class AIConfig:
         system_prompt: Optional[str] = None,
         max_tokens: int = 1000,
         temperature: float = 0.7,
-        model: str = "claude-3-5-sonnet-20241022"
+        model: str = "claude-sonnet-4-20250514"
     ) -> Optional[str]:
         """Generate text using Claude (for reasoning tasks)"""
         
@@ -136,8 +136,8 @@ class AIConfig:
         return {
             "gemini_available": self.gemini_available,
             "claude_available": self.claude_available,
-            "gemini_model": "gemini-1.5-flash" if self.gemini_available else None,
-            "claude_model": "claude-3-5-sonnet-20241022" if self.claude_available else None,
+            "gemini_model": "gemini-flash-latest" if self.gemini_available else None,
+            "claude_model": "claude-sonnet-4-20250514" if self.claude_available else None,
             "strategy": "Hybrid - Gemini for text generation, Claude for reasoning"
         }
 

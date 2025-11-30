@@ -5,10 +5,14 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getFarm, getUser, deleteFarm } from '@/lib/supabase'
 import type { Database } from '@/lib/supabase'
-import { runCompleteAnalysis, analyzeSoilHealth, analyzeROI, pollAnalysisStatus, getSoilHealthReport, getROIReport, SoilHealthReport, ROIAnalysisReport } from '@/lib/api'
+import { runCompleteAnalysis, analyzeSoilHealth, analyzeROI, pollAnalysisStatus, getSoilHealthReport, getROIReport, getZonalAnalysis, SoilHealthReport, ROIAnalysisReport, AnalysisHistorySoilHealth, AnalysisHistoryROI } from '@/lib/api'
 import SoilHealthDisplay from '@/components/Analysis/SoilHealthDisplay'
 import ROIDisplay from '@/components/Analysis/ROIDisplay'
+import AnalysisHistory from '@/components/Analysis/AnalysisHistory'
 import { InteractiveMapWrapper } from '@/components/Map/InteractiveMap'
+import ZoneMap from '@/components/Analysis/ZoneMap'
+import ZoneMapOverlay from '@/components/Analysis/ZoneMapOverlay'
+import { HealthGauge, ActionList, ZoneAlertList } from '@/components/FarmerDashboard'
 
 type Farm = Database['public']['Tables']['farms']['Row']
 
@@ -28,7 +32,61 @@ export default function FarmDetailPage({ params }: FarmDetailPageProps) {
   const [roiReport, setROIReport] = useState<ROIAnalysisReport | null>(null)
   const [showSoilHealth, setShowSoilHealth] = useState(false)
   const [showROI, setShowROI] = useState(false)
+  const [zonalAnalysis, setZonalAnalysis] = useState<any>(null)
+  const [zonalLoading, setZonalLoading] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [activeTab, setActiveTab] = useState<'current' | 'history'>('current')
   const router = useRouter()
+  
+  // Handler for selecting a historical analysis
+  const handleSelectHistoricalAnalysis = (analysis: AnalysisHistorySoilHealth | AnalysisHistoryROI, type: 'soil' | 'roi') => {
+    if (type === 'soil') {
+      const soilAnalysis = analysis as AnalysisHistorySoilHealth
+      setSoilHealthReport({
+        id: soilAnalysis.id,
+        farm_id: soilAnalysis.farm_id,
+        status: 'completed',
+        health_score: soilAnalysis.overall_health,
+        overall_health: soilAnalysis.overall_health >= 75 ? 'Healthy' : soilAnalysis.overall_health >= 55 ? 'Moderate' : 'Needs Attention',
+        summary: soilAnalysis.ai_summary || '',
+        confidence_score: soilAnalysis.confidence_score,
+        analysis_date: soilAnalysis.created_at,
+        created_at: soilAnalysis.created_at,
+        soil_indicators: {},
+        vegetation_indices: {
+          ndvi: soilAnalysis.ndvi,
+          ndwi: soilAnalysis.ndwi
+        },
+        soil_condition_indices: { bsi: 0, si: 0, ci: 0, bi: 0 },
+        deficiencies: [],
+        recommendations: soilAnalysis.recommendations || [],
+        zones: soilAnalysis.zone_data || [],
+        problem_areas: soilAnalysis.problem_zones || [],
+        satellite_source: soilAnalysis.satellite_source
+      })
+      setShowSoilHealth(true)
+    } else {
+      const roiAnalysis = analysis as AnalysisHistoryROI
+      setROIReport({
+        id: roiAnalysis.id,
+        farm_id: roiAnalysis.farm_id,
+        status: 'completed',
+        analysis_date: roiAnalysis.created_at,
+        current_crop: roiAnalysis.current_crop,
+        crop_options: roiAnalysis.recommendations || [],
+        economic_summary: roiAnalysis.ai_summary || '',
+        reasoning: roiAnalysis.strategic_advice || '',
+        risk_assessment: roiAnalysis.risk_assessment || {},
+        market_forecast: roiAnalysis.market_data || {},
+        cost_analysis: {
+          estimated_input_costs: roiAnalysis.projected_costs || 0,
+          estimated_revenue: roiAnalysis.projected_revenue || 0,
+          net_profit_estimate: roiAnalysis.projected_profit || 0
+        }
+      })
+      setShowROI(true)
+    }
+  }
   
 
 
@@ -88,19 +146,34 @@ export default function FarmDetailPage({ params }: FarmDetailPageProps) {
     
     setAnalyzing(true)
     setAnalysisError('')
+    setZonalLoading(true)
     
     try {
-      console.log('🚀 Starting AI analysis for farm:', farm.name)
-      const results = await runCompleteAnalysis(farm.id)
+      console.log('🚀 Starting complete AI analysis for farm:', farm.name)
+      
+      // Run AI analysis and zonal analysis in parallel
+      const [results, zonalData] = await Promise.all([
+        runCompleteAnalysis(farm.id),
+        getZonalAnalysis({ farm_id: farm.id, include_historical: false }).catch(err => {
+          console.warn('Zonal analysis failed:', err)
+          return null
+        })
+      ])
       
       setSoilHealthReport(results.soilHealth)
       setROIReport(results.roi)
+      if (zonalData) {
+        setZonalAnalysis(zonalData)
+      }
       setShowSoilHealth(true) // Show soil health report first
+      
+      console.log('✅ Complete analysis finished - Soil Health, ROI, and Zonal data ready')
     } catch (err: any) {
       console.error('Analysis failed:', err)
       setAnalysisError(err.message || 'Analysis failed. Please try again.')
     } finally {
       setAnalyzing(false)
+      setZonalLoading(false)
     }
   }
 
@@ -177,6 +250,30 @@ export default function FarmDetailPage({ params }: FarmDetailPageProps) {
       setAnalysisError(err.message || 'ROI analysis failed. Please try again.')
     } finally {
       setAnalyzing(false)
+    }
+  }
+
+  const handleZonalAnalysis = async () => {
+    if (!farm) return
+    
+    setZonalLoading(true)
+    setAnalysisError('')
+    
+    try {
+      console.log('🗺️ Starting zonal analysis for farm:', farm.name)
+      
+      const data = await getZonalAnalysis({
+        farm_id: farm.id,
+        include_historical: false
+      })
+      
+      setZonalAnalysis(data)
+      console.log('✅ Zonal analysis complete:', data.zones?.length, 'zones analyzed')
+    } catch (err: any) {
+      console.error('Zonal analysis failed:', err)
+      setAnalysisError(err.message || 'Zonal analysis failed. Please try again.')
+    } finally {
+      setZonalLoading(false)
     }
   }
 
@@ -475,6 +572,115 @@ export default function FarmDetailPage({ params }: FarmDetailPageProps) {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Farm Health Map - Shown AFTER analysis is complete */}
+          {(soilHealthReport || roiReport || zonalAnalysis) && (
+            <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-6">
+              <div className="px-4 py-5 sm:px-6 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg leading-6 font-medium text-gray-900 flex items-center gap-2">
+                    🗺️ Farm Health Map
+                  </h3>
+                  <p className="mt-1 max-w-2xl text-sm text-gray-500">
+                    Visual breakdown of health across different zones of your farm
+                  </p>
+                </div>
+                {zonalAnalysis && (
+                  <button
+                    onClick={handleZonalAnalysis}
+                    disabled={zonalLoading}
+                    className="text-green-600 hover:text-green-700 text-sm font-medium flex items-center gap-1"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh Map
+                  </button>
+                )}
+              </div>
+              
+              <div className="border-t border-gray-200 p-6">
+                {zonalAnalysis ? (
+                  <div className="space-y-6">
+                    {/* Satellite Map Overlay with Zone Health */}
+                    <ZoneMapOverlay 
+                      analysis={zonalAnalysis}
+                      latitude={farm.location_lat}
+                      longitude={farm.location_lng}
+                      area={farm.area_hectares}
+                      className="h-[500px] w-full"
+                    />
+                    
+                    {/* Zone Alerts */}
+                    {zonalAnalysis.zones && zonalAnalysis.zones.some((z: any) => z.health < 55) && (
+                      <ZoneAlertList 
+                        zones={zonalAnalysis.zones}
+                        maxAlerts={3}
+                      />
+                    )}
+                  </div>
+                ) : zonalLoading ? (
+                  <div className="text-center py-12">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                      <svg className="animate-spin h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    </div>
+                    <h4 className="text-lg font-medium text-gray-900 mb-2">Generating Farm Health Map...</h4>
+                    <p className="text-gray-500 text-sm">
+                      Analyzing {farm.area_hectares} hectares with satellite imagery
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <button
+                      onClick={handleZonalAnalysis}
+                      disabled={zonalLoading}
+                      className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      🛰️ Generate Farm Health Map
+                    </button>
+                    <p className="mt-2 text-xs text-gray-500">
+                      See which zones of your farm need attention
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Analysis History Section */}
+          <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-6">
+            <div className="px-4 py-5 sm:px-6 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg leading-6 font-medium text-gray-900 flex items-center gap-2">
+                  📜 Analysis History
+                </h3>
+                <p className="mt-1 max-w-2xl text-sm text-gray-500">
+                  View previous soil health and ROI analyses for this farm
+                </p>
+              </div>
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1"
+              >
+                {showHistory ? 'Hide History' : 'View History'}
+                <svg className={`h-4 w-4 transition-transform ${showHistory ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+            
+            {showHistory && (
+              <div className="border-t border-gray-200 p-6">
+                <AnalysisHistory 
+                  farmId={farm.id} 
+                  onSelectAnalysis={handleSelectHistoricalAnalysis}
+                />
+              </div>
+            )}
           </div>
 
           {/* Location Map Placeholder */}

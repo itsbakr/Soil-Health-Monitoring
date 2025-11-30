@@ -1,15 +1,85 @@
 'use client'
 
 import { ROIAnalysisReport, CropRecommendation } from '@/lib/api'
-import { useState } from 'react'
+import { useState, ReactNode } from 'react'
 
 interface ROIDisplayProps {
   report: ROIAnalysisReport
   onClose?: () => void
 }
 
+// Enhanced markdown formatter that produces clean, well-spaced output
+const formatMarkdownText = (text: string | undefined): ReactNode => {
+  if (!text) return null;
+  
+  // Split into lines first for better structure
+  const lines = text.split('\n').filter(line => line.trim());
+  
+  return (
+    <div className="space-y-2">
+      {lines.map((line, lineIndex) => {
+        const trimmedLine = line.trim();
+        
+        // Check if line is a header (bold text ending with colon or all caps)
+        const isHeader = /^\*\*[^*]+\*\*:?$/.test(trimmedLine) || 
+                        (trimmedLine === trimmedLine.toUpperCase() && trimmedLine.length > 3);
+        
+        // Remove markdown bold markers
+        const cleanLine = trimmedLine.replace(/\*\*([^*]+)\*\*/g, '$1');
+        
+        // Header styling
+        if (isHeader || cleanLine.endsWith(':')) {
+          return (
+            <div key={lineIndex} className="mt-3 first:mt-0">
+              <strong className="text-gray-900 font-semibold block">{cleanLine}</strong>
+            </div>
+          );
+        }
+        
+        // Bullet point or numbered list
+        if (cleanLine.startsWith('•') || cleanLine.startsWith('-') || /^\d+\./.test(cleanLine)) {
+          const bulletContent = cleanLine.replace(/^[•\-]\s*/, '').replace(/^\d+\.\s*/, '');
+          return (
+            <div key={lineIndex} className="flex items-start ml-4">
+              <span className="text-gray-400 mr-2">•</span>
+              <span>{bulletContent}</span>
+            </div>
+          );
+        }
+        
+        // Key-value pairs (contains colon but not at end)
+        if (cleanLine.includes(':') && !cleanLine.endsWith(':')) {
+          const [key, ...valueParts] = cleanLine.split(':');
+          const value = valueParts.join(':').trim();
+          return (
+            <div key={lineIndex} className="flex flex-wrap">
+              <span className="font-medium text-gray-700">{key}:</span>
+              <span className="ml-1">{value}</span>
+            </div>
+          );
+        }
+        
+        // Regular text
+        return <div key={lineIndex}>{cleanLine}</div>;
+      })}
+    </div>
+  );
+};
+
+// Clean markdown and return plain text (for simpler displays)
+const cleanMarkdown = (text: string | undefined): string => {
+  if (!text) return '';
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')  // Remove bold markers
+    .replace(/\*([^*]+)\*/g, '$1')       // Remove italic markers
+    .replace(/#{1,6}\s/g, '')            // Remove headers
+    .replace(/`([^`]+)`/g, '$1')         // Remove code markers
+    .replace(/\n{3,}/g, '\n\n')          // Collapse multiple newlines
+    .trim();
+};
+
 // Helper function to format executive summary
-const _formatExecutiveSummary = (summary: string) => {
+const _formatExecutiveSummary = (summary: string | undefined) => {
   if (!summary) return <p className="text-purple-700">Executive summary not available</p>;
   
   const sections = summary.split('**').filter(section => section.trim());
@@ -32,7 +102,7 @@ const _formatExecutiveSummary = (summary: string) => {
 };
 
 // Helper function to format AI reasoning
-const _formatAIReasoning = (reasoning: string) => {
+const _formatAIReasoning = (reasoning: string | undefined) => {
   if (!reasoning) return <p className="text-indigo-700">AI reasoning not available</p>;
   
   const sections = reasoning.split(/\*\*[^*]+\*\*/).filter(section => section.trim());
@@ -73,7 +143,7 @@ const getWeatherIcon = (condition: string) => {
 };
 
 // Helper function to format risk assessment
-const _formatRiskAssessment = (riskText: string) => {
+const _formatRiskAssessment = (riskText: string | undefined) => {
   if (!riskText) return <p className="text-red-700">Risk assessment not available</p>;
   
   const sections = riskText.split(/\*\*[^*]+\*\*/).filter(section => section.trim());
@@ -221,9 +291,9 @@ export default function ROIDisplay({ report, onClose }: ROIDisplayProps) {
                 {/* Executive Summary */}
                 <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">🎯 Executive Summary</h3>
-                  <p className="text-gray-700 leading-relaxed">
-                    {report.economic_summary || report.executive_summary || "Comprehensive economic analysis of crop options and market conditions."}
-                  </p>
+                  <div className="text-gray-700 leading-relaxed space-y-2">
+                    {formatMarkdownText(report.economic_summary || report.executive_summary || "Comprehensive economic analysis of crop options and market conditions.")}
+                  </div>
                 </div>
 
                 {/* Top 3 Recommendations */}
@@ -353,9 +423,9 @@ export default function ROIDisplay({ report, onClose }: ROIDisplayProps) {
                 {/* AI Reasoning */}
                 <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-6">
                   <h3 className="text-lg font-semibold text-purple-800 mb-3">🤖 AI Reasoning</h3>
-                  <p className="text-purple-700 leading-relaxed">
-                    {report.reasoning || "AI-powered analysis of market conditions, soil health, and economic factors."}
-                  </p>
+                  <div className="text-purple-700 leading-relaxed space-y-2">
+                    {formatMarkdownText(report.reasoning || "AI-powered analysis of market conditions, soil health, and economic factors.")}
+                  </div>
                 </div>
               </div>
             )}

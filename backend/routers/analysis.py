@@ -8,6 +8,7 @@ import logging
 
 from routers.auth import get_current_user_id
 from services.satellite_service import get_satellite_service, FarmCoordinates, SatelliteData
+from services.spatial_grid import FarmGrid, FarmGridAnalysis
 from services.weather_service import get_weather_service
 from services.crop_price_service import get_crop_price_service
 from services.soil_health_agent import soil_health_agent
@@ -20,6 +21,7 @@ from utils.satellite_calculations import (
     calculate_ndvi_trend
 )
 from utils.caching import satellite_cache
+from utils.database import db
 
 router = APIRouter()
 
@@ -28,6 +30,44 @@ logger = logging.getLogger(__name__)
 
 # In-memory storage for analysis results (in production, use database)
 analysis_results = {}
+
+# Import database client
+from utils.database import db
+
+# Farm data structure for passing complete farm info
+class FarmDetails:
+    """Complete farm details for analysis"""
+    def __init__(self, data: Dict[str, Any]):
+        self.latitude = data.get("latitude", 0)
+        self.longitude = data.get("longitude", 0)
+        self.area_hectares = data.get("area_hectares", 5.0)
+        self.name = data.get("name", "Unknown Farm")
+        self.crop_type = data.get("crop_type", "wheat")
+        self.planting_date = data.get("planting_date")
+        self.harvest_date = data.get("harvest_date")
+    
+    def to_coordinates(self) -> FarmCoordinates:
+        return FarmCoordinates(
+            latitude=self.latitude,
+            longitude=self.longitude,
+            area_hectares=self.area_hectares
+        )
+
+# Helper functions
+async def get_farm_coordinates(farm_id: str) -> FarmCoordinates:
+    """Get farm coordinates from Supabase database"""
+    farm_data = await db.get_farm_with_coordinates(farm_id)
+    
+    return FarmCoordinates(
+        latitude=farm_data["latitude"],
+        longitude=farm_data["longitude"],
+        area_hectares=farm_data["area_hectares"]
+    )
+
+async def get_farm_details(farm_id: str) -> FarmDetails:
+    """Get complete farm details from Supabase database"""
+    farm_data = await db.get_farm_with_coordinates(farm_id)
+    return FarmDetails(farm_data)
 
 def _extract_weather_data(weather_data, weather_service, farm_coords: FarmCoordinates):
     """Extract weather data handling both AgriculturalWeatherData and WeatherCondition objects"""
@@ -130,6 +170,33 @@ async def process_roi_analysis(analysis_id: str, farm_id: str, farm_coords: Farm
         # Get satellite data
         satellite_data = satellite_service.get_farm_satellite_data(farm_coords)
         
+        # ===== ZONAL ANALYSIS for ROI: Analyze multiple zones across the farm =====
+        zonal_start = time.time()
+        logger.info(f"🗺️ [ROI-{analysis_short_id}] Performing spatial zonal analysis for precision ROI...")
+        zonal_result = satellite_service.get_zonal_analysis(farm_coords)
+        zonal_duration = time.time() - zonal_start
+        
+        # Prepare zone data for ROI analysis
+        zone_data_for_roi = []
+        if zonal_result:
+            logger.info(f"🗺️ [ROI-{analysis_short_id}] Zonal analysis complete: {zonal_result.grid_size[0]}x{zonal_result.grid_size[1]} grid ({len(zonal_result.zones)} zones) in {zonal_duration:.2f}s")
+            
+            for zone in zonal_result.zones:
+                zone_info = {
+                    "zone_id": zone.zone_id,
+                    "position": f"Row {zone.row + 1}, Col {zone.col + 1}",
+                    "health_score": zone.health_score,
+                    "status": zone.status.value if hasattr(zone.status, 'value') else zone.status,
+                    "ndvi": zone.ndvi,
+                    "ndwi": zone.ndwi,
+                    "moisture": zone.moisture,
+                    "alerts": zone.alerts,
+                    "recommendations": zone.recommendations
+                }
+                zone_data_for_roi.append(zone_info)
+        else:
+            logger.warning(f"⚠️ [ROI-{analysis_short_id}] Zonal analysis unavailable, using single-point analysis")
+        
         # Get weather data (try agricultural analysis first, fall back to current weather)
         weather_data = weather_service.get_agricultural_weather_analysis(
             farm_coords.latitude, farm_coords.longitude
@@ -183,6 +250,16 @@ async def process_roi_analysis(analysis_id: str, farm_id: str, farm_coords: Farm
                     "market_sentiment": wheat_prices.market_sentiment if wheat_prices else "neutral",
                     "trend": wheat_prices.price_history.trend if wheat_prices and wheat_prices.price_history else "stable"
                 } if wheat_prices else {}
+            },
+            # Zone-by-zone spatial analysis data for precision ROI
+            "zonal_analysis": {
+                "enabled": len(zone_data_for_roi) > 0,
+                "grid_size": f"{zonal_result.grid_size[0]}x{zonal_result.grid_size[1]}" if zonal_result else "N/A",
+                "total_zones": len(zone_data_for_roi),
+                "overall_farm_health": zonal_result.overall_health if zonal_result else (satellite_data.ndvi * 100 if satellite_data else 50.0),
+                "problem_zones": zonal_result.problem_zones if zonal_result else [],
+                "zones": zone_data_for_roi,
+                "spatial_summary": f"Farm divided into {len(zone_data_for_roi)} zones for precision ROI analysis" if zone_data_for_roi else "Single-point analysis"
             }
         }
         
@@ -233,7 +310,7 @@ async def process_roi_analysis(analysis_id: str, farm_id: str, farm_coords: Farm
                 "crop_type": crop_rec.crop_name.lower(),
                 "recommendation_level": "highly_recommended" if crop_rec.roi_percentage > 80 else 
                                        "recommended" if crop_rec.roi_percentage > 50 else 
-                                       "consider" if crop_rec.roi_percentage > 20 else "not_recommended",
+                                       "neutral" if crop_rec.roi_percentage > 20 else "not_recommended",
                 "expected_yield": crop_rec.expected_yield,
                 "estimated_revenue": crop_rec.expected_revenue,
                 "input_costs": crop_rec.input_costs,
@@ -302,9 +379,9 @@ async def process_roi_analysis(analysis_id: str, farm_id: str, farm_coords: Farm
 🛡️ **RISK ANALYSIS - {roi_report.recommended_crop.risk_level.value.upper()} RISK**
 
 **SCENARIO ANALYSIS:**
-• Optimistic (25% chance): {roi_report.scenario_analysis['optimistic']['roi']:.1f}% ROI
-• Most Likely (50% chance): {roi_report.scenario_analysis['most_likely']['roi']:.1f}% ROI  
-• Pessimistic (25% chance): {roi_report.scenario_analysis['pessimistic']['roi']:.1f}% ROI
+• Optimistic (25% chance): {roi_report.scenario_analysis.get('optimistic', {}).get('roi', roi_report.recommended_crop.roi_percentage * 1.2):.1f}% ROI
+• Most Likely (50% chance): {roi_report.scenario_analysis.get('most_likely', {}).get('roi', roi_report.recommended_crop.roi_percentage):.1f}% ROI  
+• Pessimistic (25% chance): {roi_report.scenario_analysis.get('pessimistic', {}).get('roi', roi_report.recommended_crop.roi_percentage * 0.7):.1f}% ROI
 
 **KEY RISK FACTORS:**
 {chr(10).join(f"• {risk}" for risk in roi_report.recommended_crop.risk_factors)}
@@ -312,8 +389,8 @@ async def process_roi_analysis(analysis_id: str, farm_id: str, farm_coords: Farm
 **MITIGATION STRATEGIES:**
 {chr(10).join(f"• {strategy}" for strategy in roi_report.recommended_crop.mitigation_strategies)}
 
-**OVERALL RISK LEVEL:** {roi_report.risk_assessment['overall_risk']}
-**MITIGATION EFFECTIVENESS:** {roi_report.risk_assessment['mitigation_effectiveness']:.0%}
+**OVERALL RISK LEVEL:** {roi_report.risk_assessment.get('overall_risk', roi_report.recommended_crop.risk_level.value)}
+**MITIGATION EFFECTIVENESS:** {roi_report.risk_assessment.get('mitigation_effectiveness', 0.7):.0%}
 
 **CONFIDENCE LEVEL:** {roi_report.confidence_level:.1%}
                 """,
@@ -328,7 +405,7 @@ async def process_roi_analysis(analysis_id: str, farm_id: str, farm_coords: Farm
 {chr(10).join(f"{i+1}. {step}" for i, step in enumerate(roi_report.recommended_crop.implementation_steps))}
 
 **DECISION FACTORS:**
-{chr(10).join(f"• {factor}" for factor in roi_report.decision_matrix['winning_factors'])}
+{chr(10).join(f"• {factor}" for factor in roi_report.decision_matrix.get('winning_factors', ['Based on soil compatibility', 'Market potential']))}
 
 **FARMER SUMMARY:**
 {roi_report.farmer_explanation}
@@ -355,6 +432,31 @@ async def process_roi_analysis(analysis_id: str, farm_id: str, farm_coords: Farm
         
         total_duration = time.time() - analysis_start
         logger.info(f"✅ [ROI-{analysis_short_id}] Comprehensive ROI analysis completed in {total_duration:.2f}s")
+        
+        # ===== PERSIST ROI ANALYSIS TO SUPABASE =====
+        try:
+            user_id = analysis_results[analysis_id].get("user_id")
+            if user_id:
+                roi_data_to_save = {
+                    "overall_roi_percentage": roi_report.recommended_crop.roi_percentage,
+                    "recommended_crop": {
+                        "name": roi_report.recommended_crop.crop_name,
+                        "roi": roi_report.recommended_crop.roi_percentage,
+                        "net_profit": roi_report.recommended_crop.net_profit,
+                        "risk_level": roi_report.recommended_crop.risk_level.value if hasattr(roi_report.recommended_crop.risk_level, 'value') else str(roi_report.recommended_crop.risk_level)
+                    },
+                    "crop_options": crop_options,
+                    "market_conditions": farm_analysis_data.get("market_data", {}),
+                    "economic_summary": roi_report.executive_summary,
+                    "risk_assessment": roi_report.risk_assessment
+                }
+                
+                saved_id = await db.save_roi_analysis(farm_id, user_id, roi_data_to_save)
+                if saved_id:
+                    logger.info(f"💾 [ROI-{analysis_short_id}] Saved ROI analysis to Supabase: {saved_id}")
+                    analysis_results[analysis_id]["roi_db_id"] = saved_id
+        except Exception as db_error:
+            logger.warning(f"⚠️ [ROI-{analysis_short_id}] Failed to persist ROI analysis to database: {db_error}")
         
     except Exception as e:
         import traceback
@@ -406,15 +508,18 @@ def _convert_to_soil_health_report(existing_analysis: Dict[str, Any]):
     
     return MockSoilHealthReport(existing_analysis)
 
-async def process_soil_health_analysis(analysis_id: str, farm_id: str, farm_coords: FarmCoordinates, include_historical: bool = True):
+async def process_soil_health_analysis(analysis_id: str, farm_id: str, farm_details: FarmDetails, include_historical: bool = True):
     """Background task to process comprehensive soil health analysis using satellite, weather, and market data"""
     import time
     
     analysis_start = time.time()
     analysis_short_id = analysis_id[:8]
+    farm_coords = farm_details.to_coordinates()
     
     try:
         logger.info(f"🚀 [ANALYSIS-{analysis_short_id}] Starting comprehensive analysis for farm {farm_id}")
+        logger.info(f"📍 [ANALYSIS-{analysis_short_id}] Farm: {farm_details.name} at ({farm_details.latitude:.4f}, {farm_details.longitude:.4f})")
+        logger.info(f"🌾 [ANALYSIS-{analysis_short_id}] Crop: {farm_details.crop_type}, Area: {farm_details.area_hectares} ha")
         
         # Update status to in progress
         if analysis_id in analysis_results:
@@ -489,12 +594,44 @@ async def process_soil_health_analysis(analysis_id: str, farm_id: str, farm_coor
         salinity_info = calculate_soil_salinity_level(current_data.si)
         moisture_info = estimate_soil_moisture(current_data.ndmi)
         
-        # Prepare comprehensive farm data for AI analysis
+        # ===== ZONAL ANALYSIS: Analyze multiple zones across the farm =====
+        zonal_start = time.time()
+        logger.info(f"🗺️ [ANALYSIS-{analysis_short_id}] Performing spatial zonal analysis...")
+        zonal_result = satellite_service.get_zonal_analysis(farm_coords)
+        zonal_duration = time.time() - zonal_start
+        
+        # Prepare zone data for AI analysis
+        zone_data_for_ai = []
+        if zonal_result:
+            logger.info(f"🗺️ [ANALYSIS-{analysis_short_id}] Zonal analysis complete: {zonal_result.grid_size[0]}x{zonal_result.grid_size[1]} grid ({len(zonal_result.zones)} zones) in {zonal_duration:.2f}s")
+            
+            for zone in zonal_result.zones:
+                zone_info = {
+                    "zone_id": zone.zone_id,
+                    "position": f"Row {zone.row + 1}, Col {zone.col + 1}",
+                    "health_score": zone.health_score,
+                    "status": zone.status.value if hasattr(zone.status, 'value') else zone.status,
+                    "ndvi": zone.ndvi,
+                    "ndwi": zone.ndwi,
+                    "moisture": zone.moisture,
+                    "alerts": zone.alerts,
+                    "recommendations": zone.recommendations
+                }
+                zone_data_for_ai.append(zone_info)
+        else:
+            logger.warning(f"⚠️ [ANALYSIS-{analysis_short_id}] Zonal analysis unavailable, using single-point analysis")
+        
+        # Prepare comprehensive farm data for AI analysis using real farm details
         farm_analysis_data = {
             "farm_id": farm_id,
-            "size_acres": 100,  # Would get from database
-            "current_crop": "corn",  # Would get from database
-            "location": f"{farm_coords.latitude:.4f}, {farm_coords.longitude:.4f}",
+            "farm_name": farm_details.name,
+            "size_hectares": farm_details.area_hectares,
+            "size_acres": farm_details.area_hectares * 2.471,  # Convert hectares to acres
+            "current_crop": farm_details.crop_type,
+            "planting_date": str(farm_details.planting_date) if farm_details.planting_date else None,
+            "harvest_date": str(farm_details.harvest_date) if farm_details.harvest_date else None,
+            "location": f"{farm_details.latitude:.6f}, {farm_details.longitude:.6f}",
+            "region": "Egypt" if 25 < farm_details.latitude < 32 and 25 < farm_details.longitude < 35 else "Unknown",
             "soil_analysis": {
                 "ndvi": current_data.ndvi,
                 "ndwi": current_data.ndwi,
@@ -543,7 +680,17 @@ async def process_soil_health_analysis(analysis_id: str, farm_id: str, farm_coor
                     "trend": wheat_prices.price_history.trend if wheat_prices and wheat_prices.price_history else None
                 } if wheat_prices else {}
             },
-            "historical_data": historical_data
+            "historical_data": historical_data,
+            # Zone-by-zone spatial analysis data
+            "zonal_analysis": {
+                "enabled": len(zone_data_for_ai) > 0,
+                "grid_size": f"{zonal_result.grid_size[0]}x{zonal_result.grid_size[1]}" if zonal_result else "N/A",
+                "total_zones": len(zone_data_for_ai),
+                "overall_farm_health": zonal_result.overall_health if zonal_result else current_data.ndvi * 100,
+                "problem_zones": zonal_result.problem_zones if zonal_result else [],
+                "zones": zone_data_for_ai,
+                "spatial_summary": f"Farm divided into {len(zone_data_for_ai)} zones for precision analysis" if zone_data_for_ai else "Single-point analysis"
+            }
         }
         
         # Use AI agents for sophisticated analysis
@@ -617,6 +764,32 @@ async def process_soil_health_analysis(analysis_id: str, farm_id: str, farm_coor
         
         total_duration = time.time() - analysis_start
         logger.info(f"✅ [ANALYSIS-{analysis_short_id}] Comprehensive analysis completed for farm {farm_id} in {total_duration:.2f}s")
+        
+        # ===== PERSIST TO SUPABASE =====
+        try:
+            # Get user_id from the analysis results (set during request)
+            user_id = analysis_results[analysis_id].get("user_id")
+            if user_id:
+                analysis_data_to_save = {
+                    "health_score": health_score,
+                    "overall_health": overall_health,
+                    "confidence_score": current_data.data_quality_score / 100.0,
+                    "soil_indicators": analysis_results[analysis_id].get("soil_indicators", {}),
+                    "vegetation_indices": analysis_results[analysis_id].get("vegetation_indices", {}),
+                    "soil_condition_indices": analysis_results[analysis_id].get("soil_condition_indices", {}),
+                    "recommendations": recommendations,
+                    "deficiencies": deficiencies,
+                    "summary": summary,
+                    "satellite_source": "Sentinel-2/Landsat",
+                    "zone_data": [z.to_dict() for z in zonal_result.zones] if zonal_result else None
+                }
+                
+                saved_id = await db.save_soil_health_analysis(farm_id, user_id, analysis_data_to_save)
+                if saved_id:
+                    logger.info(f"💾 [ANALYSIS-{analysis_short_id}] Saved to Supabase: {saved_id}")
+                    analysis_results[analysis_id]["db_id"] = saved_id
+        except Exception as db_error:
+            logger.warning(f"⚠️ [ANALYSIS-{analysis_short_id}] Failed to persist to database: {db_error}")
         
     except Exception as e:
         total_duration = time.time() - analysis_start
@@ -726,17 +899,6 @@ class AnalysisRequest(BaseModel):
     include_historical: bool = Field(default=True, description="Include historical trend analysis")
     generate_roi: bool = Field(default=True, description="Generate ROI recommendations")
 
-# Helper functions
-async def get_farm_coordinates(farm_id: str) -> FarmCoordinates:
-    """Get farm coordinates from database - placeholder implementation"""
-    # TODO: Replace with actual database query
-    # For demo purposes, return sample coordinates
-    return FarmCoordinates(
-        latitude=40.7128,  # New York coordinates as example
-        longitude=-74.0060,
-        area_hectares=10.0
-    )
-
 @router.post("/soil-health", response_model=SoilHealthReport, status_code=status.HTTP_202_ACCEPTED)
 async def analyze_soil_health(
     request: AnalysisRequest,
@@ -753,8 +915,9 @@ async def analyze_soil_health(
         # Generate unique analysis ID
         analysis_id = str(uuid.uuid4())
         
-        # Get farm coordinates
-        farm_coords = await get_farm_coordinates(request.farm_id)
+        # Get complete farm details from database
+        farm_details = await get_farm_details(request.farm_id)
+        logger.info(f"📍 Starting analysis for {farm_details.name} at ({farm_details.latitude:.4f}, {farm_details.longitude:.4f})")
         
         # Create initial analysis record
         initial_analysis = {
@@ -795,12 +958,12 @@ async def analyze_soil_health(
         # Store initial analysis
         analysis_results[analysis_id] = initial_analysis
         
-        # Add background task for actual processing
+        # Add background task for actual processing with full farm details
         background_tasks.add_task(
             process_soil_health_analysis,
             analysis_id,
             request.farm_id,
-            farm_coords,
+            farm_details,
             request.include_historical
         )
         
@@ -923,6 +1086,124 @@ async def get_farm_analysis_history(
         "farm_id": farm_id,
         "analyses": [],
         "total_count": 0
+    }
+
+@router.post("/zonal-analysis")
+async def analyze_farm_zones(
+    request: AnalysisRequest,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Perform zone-by-zone spatial analysis of a farm.
+    
+    This endpoint:
+    - Auto-generates a grid based on farm size (2x2 to 5x5)
+    - Analyzes each zone separately using optimal satellite data
+    - Returns health scores and heatmap data per zone
+    - Identifies problem areas with specific recommendations
+    
+    Grid sizes:
+    - < 2 ha: 2x2 grid (4 zones) using Sentinel-2 (10m)
+    - 2-10 ha: 3x3 grid (9 zones) using Sentinel-2 (10m)  
+    - 10-50 ha: 4x4 grid (16 zones) using Landsat (30m)
+    - 50+ ha: 5x5 grid (25 zones) using Landsat (30m)
+    """
+    try:
+        logger.info(f"🗺️ Starting zonal analysis for farm {request.farm_id}")
+        
+        # Get farm coordinates
+        farm_coords = await get_farm_coordinates(request.farm_id)
+        
+        # Get satellite service and perform zonal analysis
+        satellite_service = get_satellite_service()
+        
+        if not satellite_service.is_available():
+            logger.warning("Satellite service unavailable, using demo zonal data")
+        
+        # Perform zonal analysis
+        zonal_result = satellite_service.get_zonal_analysis(farm_coords)
+        
+        if zonal_result is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to perform zonal analysis"
+            )
+        
+        # Convert to API response format
+        response = {
+            "farm_id": request.farm_id,
+            "analysis_type": "zonal",
+            "grid_size": {"rows": zonal_result.grid_size[0], "cols": zonal_result.grid_size[1]},
+            "satellite_source": zonal_result.satellite_source.value,
+            "resolution_meters": zonal_result.resolution_meters,
+            "overall_health": zonal_result.overall_health,
+            "zones": [z.to_dict() for z in zonal_result.zones],
+            "problem_zones": zonal_result.problem_zones,
+            "heatmap_data": zonal_result.heatmap_data,
+            "analysis_timestamp": zonal_result.analysis_timestamp,
+            "summary": _generate_zonal_summary(zonal_result)
+        }
+        
+        logger.info(f"✅ Zonal analysis complete: {len(zonal_result.zones)} zones analyzed")
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in zonal analysis: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Zonal analysis failed: {str(e)}"
+        )
+
+def _generate_zonal_summary(analysis: FarmGridAnalysis) -> Dict[str, Any]:
+    """Generate human-readable summary of zonal analysis"""
+    problem_count = len(analysis.problem_zones)
+    total_zones = len(analysis.zones)
+    healthy_zones = total_zones - problem_count
+    
+    # Determine overall status
+    if analysis.overall_health >= 75:
+        status = "healthy"
+        emoji = "🌱"
+        message = "Your farm is looking great!"
+    elif analysis.overall_health >= 55:
+        status = "moderate"
+        emoji = "🌿"
+        message = "Your farm is doing okay, with some areas needing attention."
+    elif analysis.overall_health >= 35:
+        status = "needs_attention"
+        emoji = "⚠️"
+        message = "Several areas of your farm need care."
+    else:
+        status = "critical"
+        emoji = "🚨"
+        message = "Your farm needs immediate attention."
+    
+    # Get priority actions
+    priority_actions = []
+    for zone in analysis.zones:
+        if zone.health_score < 55 and zone.alerts:
+            priority_actions.append({
+                "zone": zone.zone_id,
+                "action": zone.alerts[0] if zone.alerts else "Monitor this area",
+                "health": zone.health_score
+            })
+    
+    # Sort by health score (worst first)
+    priority_actions.sort(key=lambda x: x["health"])
+    
+    return {
+        "status": status,
+        "emoji": emoji,
+        "message": message,
+        "overall_health": analysis.overall_health,
+        "healthy_zones": healthy_zones,
+        "problem_zones": problem_count,
+        "total_zones": total_zones,
+        "priority_actions": priority_actions[:3],  # Top 3 actions
+        "farmer_summary": f"{emoji} {message} {healthy_zones}/{total_zones} areas are healthy."
     } 
 
 @router.get("/debug/config")
@@ -1032,3 +1313,88 @@ async def get_analysis_status():
                 "ai_analysis": {"available": False, "status": "error"}
             }
         } 
+
+
+# ============================================================================
+# ANALYSIS HISTORY ENDPOINTS
+# ============================================================================
+
+class AnalysisHistoryResponse(BaseModel):
+    """Response model for analysis history"""
+    soil_health: List[Dict[str, Any]] = []
+    roi: List[Dict[str, Any]] = []
+    total_analyses: int = 0
+
+
+@router.get("/history/{farm_id}", response_model=AnalysisHistoryResponse)
+async def get_analysis_history(
+    farm_id: str,
+    limit: int = 10,
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Get analysis history for a specific farm.
+    
+    Returns both soil health and ROI analysis history.
+    """
+    logger.info(f"📜 Fetching analysis history for farm {farm_id}")
+    
+    try:
+        # Get combined history from database
+        history = await db.get_combined_analysis_history(farm_id, limit)
+        
+        soil_health_count = len(history.get("soil_health", []))
+        roi_count = len(history.get("roi", []))
+        
+        logger.info(f"✅ Found {soil_health_count} soil health and {roi_count} ROI analyses")
+        
+        return AnalysisHistoryResponse(
+            soil_health=history.get("soil_health", []),
+            roi=history.get("roi", []),
+            total_analyses=soil_health_count + roi_count
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching analysis history: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch analysis history: {str(e)}"
+        )
+
+
+@router.get("/history/{farm_id}/soil-health")
+async def get_soil_health_history(
+    farm_id: str,
+    limit: int = 10,
+    user_id: str = Depends(get_current_user_id)
+):
+    """Get soil health analysis history for a specific farm"""
+    try:
+        history = await db.get_soil_health_history(farm_id, limit)
+        return {
+            "farm_id": farm_id,
+            "analyses": history,
+            "count": len(history)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching soil health history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/history/{farm_id}/roi")
+async def get_roi_history(
+    farm_id: str,
+    limit: int = 10,
+    user_id: str = Depends(get_current_user_id)
+):
+    """Get ROI analysis history for a specific farm"""
+    try:
+        history = await db.get_roi_history(farm_id, limit)
+        return {
+            "farm_id": farm_id,
+            "analyses": history,
+            "count": len(history)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching ROI history: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) 

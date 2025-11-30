@@ -1,13 +1,70 @@
 'use client'
 
 import { SoilHealthReport } from '@/lib/api'
-import { useState } from 'react'
-// Remove: import { Tooltip } from '@mui/material';
+import { useState, ReactNode } from 'react'
 
 interface SoilHealthDisplayProps {
   report: SoilHealthReport
   onClose?: () => void
 }
+
+// Enhanced markdown formatter that produces clean, well-spaced output
+const formatMarkdownText = (text: string | undefined): ReactNode => {
+  if (!text) return null;
+  
+  // Split into lines first for better structure
+  const lines = text.split('\n').filter(line => line.trim());
+  
+  return (
+    <div className="space-y-2">
+      {lines.map((line, lineIndex) => {
+        const trimmedLine = line.trim();
+        
+        // Check if line is a header (bold text ending with colon or all caps)
+        const isHeader = /^\*\*[^*]+\*\*:?$/.test(trimmedLine) || 
+                        (trimmedLine === trimmedLine.toUpperCase() && trimmedLine.length > 3);
+        
+        // Remove markdown bold markers
+        const cleanLine = trimmedLine.replace(/\*\*([^*]+)\*\*/g, '$1');
+        
+        // Header styling
+        if (isHeader || cleanLine.endsWith(':')) {
+          return (
+            <div key={lineIndex} className="mt-3 first:mt-0">
+              <strong className="text-gray-900 font-semibold block">{cleanLine}</strong>
+            </div>
+          );
+        }
+        
+        // Bullet point or numbered list
+        if (cleanLine.startsWith('•') || cleanLine.startsWith('-') || /^\d+\./.test(cleanLine)) {
+          const bulletContent = cleanLine.replace(/^[•\-]\s*/, '').replace(/^\d+\.\s*/, '');
+          return (
+            <div key={lineIndex} className="flex items-start ml-4">
+              <span className="text-gray-400 mr-2">•</span>
+              <span>{bulletContent}</span>
+            </div>
+          );
+        }
+        
+        // Key-value pairs (contains colon but not at end)
+        if (cleanLine.includes(':') && !cleanLine.endsWith(':')) {
+          const [key, ...valueParts] = cleanLine.split(':');
+          const value = valueParts.join(':').trim();
+          return (
+            <div key={lineIndex} className="flex flex-wrap">
+              <span className="font-medium text-gray-700">{key}:</span>
+              <span className="ml-1">{value}</span>
+            </div>
+          );
+        }
+        
+        // Regular text
+        return <div key={lineIndex}>{cleanLine}</div>;
+      })}
+    </div>
+  );
+};
 
 export default function SoilHealthDisplay({ report, onClose }: SoilHealthDisplayProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'details' | 'recommendations' | 'ai-insights' | 'trends'>('overview')
@@ -27,7 +84,8 @@ export default function SoilHealthDisplay({ report, onClose }: SoilHealthDisplay
     return '🚨'
   }
 
-  const getIndicatorStatus = (value: number, optimal: { min: number; max: number }) => {
+  const getIndicatorStatus = (value: number | undefined, optimal: { min: number; max: number }) => {
+    if (value === undefined) return 'unknown'
     if (value >= optimal.min && value <= optimal.max) return 'optimal'
     if (value < optimal.min * 0.8 || value > optimal.max * 1.2) return 'critical'
     return 'suboptimal'
@@ -131,9 +189,9 @@ export default function SoilHealthDisplay({ report, onClose }: SoilHealthDisplay
                   <h3 className="mt-2 text-xl font-semibold text-gray-900 capitalize">
                     {report.overall_health} Soil Health
                   </h3>
-                  <p className="text-gray-600 max-w-3xl mx-auto leading-relaxed">
-                    {report.summary}
-                  </p>
+                  <div className="text-gray-600 max-w-3xl mx-auto leading-relaxed">
+                    {formatMarkdownText(report.summary)}
+                  </div>
                 </div>
 
                 {/* --- Satellite Data Quality Summary --- */}
@@ -202,7 +260,9 @@ export default function SoilHealthDisplay({ report, onClose }: SoilHealthDisplay
                       </span>
                     </h4>
                     <div className="space-y-2">
-                      {Object.entries(report.vegetation_indices).map(([key, value]) => {
+                      {Object.entries(report.vegetation_indices)
+                        .filter(([_, value]) => value !== undefined)
+                        .map(([key, value]) => {
                         const optimal = vegetationOptimal[key as keyof typeof vegetationOptimal]
                         const status = optimal ? getIndicatorStatus(value, optimal) : 'unknown'
                         return (
@@ -212,7 +272,7 @@ export default function SoilHealthDisplay({ report, onClose }: SoilHealthDisplay
                                 {key}
                               </span>
                               <span className="text-sm font-bold">
-                                {value.toFixed(3)}
+                                {value?.toFixed(3) ?? 'N/A'}
                               </span>
                             </div>
                             {optimal && (
@@ -354,7 +414,9 @@ export default function SoilHealthDisplay({ report, onClose }: SoilHealthDisplay
                   <div className="bg-white border rounded-lg p-6">
                     <h4 className="font-semibold text-gray-900 mb-4">🌿 Detailed Vegetation Analysis</h4>
                     <div className="space-y-4">
-                      {Object.entries(report.vegetation_indices).map(([key, value]) => {
+                      {Object.entries(report.vegetation_indices)
+                        .filter(([_, value]) => value !== undefined)
+                        .map(([key, value]) => {
                         const optimal = vegetationOptimal[key as keyof typeof vegetationOptimal]
                         const status = optimal ? getIndicatorStatus(value, optimal) : 'unknown'
                         return (
@@ -366,7 +428,7 @@ export default function SoilHealthDisplay({ report, onClose }: SoilHealthDisplay
                               </span>
                             </div>
                             <div className="text-2xl font-bold text-gray-900 mb-1">
-                              {value.toFixed(3)}
+                              {value?.toFixed(3) ?? 'N/A'}
                             </div>
                             {optimal && (
                               <div className="text-sm text-gray-600">
@@ -448,7 +510,7 @@ export default function SoilHealthDisplay({ report, onClose }: SoilHealthDisplay
                     <div>
                       <h4 className="font-medium text-purple-900 mb-2">👨‍🌾 Farmer Summary</h4>
                       <div className="text-purple-800 leading-relaxed">
-                        {(report as any).farmer_summary || "Your soil health shows areas for improvement. The most important focus right now should be on addressing pH levels and improving water management. With proper soil amendments and management practices, you can significantly enhance your farm's productivity and long-term sustainability."}
+                        {formatMarkdownText((report as any).farmer_summary || "Your soil health shows areas for improvement. The most important focus right now should be on addressing pH levels and improving water management. With proper soil amendments and management practices, you can significantly enhance your farm's productivity and long-term sustainability.")}
                       </div>
                     </div>
 

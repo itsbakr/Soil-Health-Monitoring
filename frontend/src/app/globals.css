@@ -96,6 +96,25 @@
   @apply rounded-lg overflow-hidden;
 }
 
+/* Zone map tooltip styles */
+.zone-tooltip {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  padding: 4px 8px !important;
+  font-family: inherit !important;
+}
+
+.zone-tooltip::before {
+  display: none !important;
+}
+
+/* Zone rectangle hover effect */
+.leaflet-interactive:hover {
+  cursor: pointer !important;
+}
+
 /* Chart container */
 .recharts-wrapper {
   @apply w-full;

@@ -4,12 +4,28 @@ A comprehensive agricultural platform that combines satellite data analysis, wea
 
 ## 🌟 Features
 
+### Core Analysis
 - **🛰️ Satellite Data Analysis**: Google Earth Engine integration for vegetation and soil health monitoring
 - **🌦️ Weather Intelligence**: Real-time weather data with agricultural indices (GDD, drought risk, frost alerts)
 - **📈 Market Analysis**: Crop price monitoring and market sentiment analysis
-- **🤖 AI-Powered Insights**: Intelligent soil health assessment and crop recommendations
+- **🤖 AI-Powered Insights**: Intelligent soil health assessment and crop recommendations using Gemini & Claude
 - **📊 Comprehensive Dashboard**: Interactive farm management with real-time analytics
 - **🔄 Real-time Updates**: Automated monitoring with alert systems
+
+### 🆕 Spatial Zone Analysis
+- **🗺️ Dynamic Grid System**: Auto-generates analysis zones based on farm size
+  - < 2 ha: 2×2 grid (4 zones) using Sentinel-2 (10m resolution)
+  - 2-10 ha: 3×3 grid (9 zones) using Sentinel-2 (10m resolution)
+  - 10-50 ha: 4×4 grid (16 zones) using Landsat (30m resolution)
+  - 50+ ha: 5×5 grid (25 zones) using Landsat (30m resolution)
+- **🎯 Zone-Level Recommendations**: AI agents provide specific actions for each problem zone
+- **🔥 Interactive Health Map**: Satellite imagery overlay with color-coded zones showing exactly WHERE problems are
+
+### 🆕 Analysis History & Persistence
+- **💾 Database Storage**: All soil health and ROI analyses are saved to Supabase
+- **📜 Analysis History**: View and compare past analyses for trend tracking
+- **🔍 Historical Insights**: Click any past analysis to view full details
+- **📊 Trend Analysis**: Track farm health improvements over time
 
 ## 🛠️ Tech Stack
 
@@ -199,43 +215,67 @@ OPENWEATHERMAP_API_KEY=your_api_key
 ## 🏗️ Project Structure
 
 ```
-larmms/
-├── frontend/                 # Next.js frontend application
+SoilGuard/
+├── frontend/                    # Next.js frontend application
 │   ├── src/
-│   │   ├── app/             # App router pages
-│   │   ├── components/      # Reusable React components
-│   │   └── lib/             # Utilities and configurations
-├── backend/                 # FastAPI backend application
-│   ├── routers/             # API route handlers
-│   ├── services/            # External API integrations
-│   ├── utils/               # Helper functions
-│   └── requirements.txt     # Python dependencies
+│   │   ├── app/                # App router pages
+│   │   │   └── dashboard/      # Farm management pages
+│   │   ├── components/
+│   │   │   ├── Analysis/       # SoilHealthDisplay, ROIDisplay, AnalysisHistory, ZoneMapOverlay
+│   │   │   ├── Map/            # Interactive maps and location picker
+│   │   │   └── FarmerDashboard/# Health gauges, action cards, zone alerts
+│   │   └── lib/                # API client, Supabase config, utilities
+├── backend/                    # FastAPI backend application
+│   ├── routers/
+│   │   ├── analysis.py        # Soil health, ROI, zonal analysis endpoints + history
+│   │   ├── farms.py           # Farm CRUD operations
+│   │   └── auth.py            # Authentication endpoints
+│   ├── services/
+│   │   ├── satellite_service.py    # Google Earth Engine integration
+│   │   ├── spatial_grid.py         # 🆕 Dynamic zone grid generation
+│   │   ├── soil_health_agent.py    # AI soil analysis with zone recommendations
+│   │   ├── roi_agent.py            # AI crop ROI analysis
+│   │   └── ai_config.py            # Gemini + Claude configuration
+│   ├── utils/
+│   │   ├── database.py             # 🆕 Supabase client for persistence
+│   │   └── satellite_calculations.py
+│   └── requirements.txt
 ├── supabase/
-│   └── migrations/          # Database schema migrations
-├── env.template             # Environment variables template
-├── .gitignore              # Git ignore patterns
-└── README.md               # This file
+│   └── migrations/
+│       ├── 001_initial_schema.sql      # Users, farms tables
+│       └── 002_analysis_tables.sql     # 🆕 soil_health_analyses, roi_analyses tables
+├── backend/env.example         # Backend environment template
+├── frontend/env.example        # Frontend environment template
+└── README.md
 ```
 
 ## 🧪 Testing the Platform
 
 ### 1. Check Service Status
 ```bash
-curl http://localhost:8000/analysis/status
+curl http://localhost:8000/health
+curl http://localhost:8000/api/v1/analysis/status
 ```
 
 ### 2. Test Farm Creation
 1. Open http://localhost:3000
 2. Register/Login
-3. Add a new farm
+3. Add a new farm with pin drop location
 4. View satellite analysis
 
 ### 3. Test Analysis Pipeline
 The platform automatically processes:
-- Satellite vegetation indices (NDVI, NDWI, etc.)
+- Satellite vegetation indices (NDVI, NDWI, SAVI, EVI, etc.)
+- Zone-based health scoring (dynamic grid based on farm size)
 - Weather risk assessment
 - Market price analysis
-- AI-powered recommendations
+- AI-powered recommendations with zone-specific actions
+
+### 4. Test Analysis History
+1. Run a complete analysis on a farm
+2. Expand the "Analysis History" section on the farm page
+3. View past analyses and click to see full details
+4. Compare trends over time
 
 ## 🚀 Deployment
 
@@ -262,23 +302,6 @@ railway up
 4. Push to branch: `git push origin feature/amazing-feature`
 5. Open a Pull Request
 
-## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-- **Documentation**: [Project Wiki](https://github.com/yourusername/larmms/wiki)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/larmms/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/larmms/discussions)
-
-## 🏆 Acknowledgments
-
-- Google Earth Engine for satellite data access
-- OpenWeatherMap for weather data
-- Supabase for backend infrastructure
-- All contributors and the open-source community
-
----
 
 **Built with ❤️ for sustainable agriculture and data-driven farming** 

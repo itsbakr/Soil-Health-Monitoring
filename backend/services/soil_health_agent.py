@@ -1,21 +1,53 @@
 """
 Advanced Soil Health Assessment Agent
 Uses hybrid Gemini + Claude approach with sophisticated prompting techniques
+Supports zone-by-zone spatial analysis for precision agriculture
 """
 
 import json
 import logging
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .ai_config import ai_config
 
 logger = logging.getLogger(__name__)
 
 @dataclass
+class ZoneHealthResult:
+    """Health assessment for a single zone"""
+    zone_id: str
+    row: int
+    col: int
+    health_score: float  # 0-100
+    status: str  # "healthy", "moderate", "degraded", "critical"
+    ndvi: float
+    ndwi: float
+    moisture: float
+    issues: List[str] = field(default_factory=list)
+    recommendations: List[str] = field(default_factory=list)
+    priority: str = "normal"  # "critical", "high", "normal", "low"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "zone_id": self.zone_id,
+            "row": self.row,
+            "col": self.col,
+            "health": self.health_score,
+            "status": self.status,
+            "ndvi": round(self.ndvi, 3),
+            "ndwi": round(self.ndwi, 3),
+            "moisture": round(self.moisture, 1),
+            "issues": self.issues,
+            "recommendations": self.recommendations,
+            "priority": self.priority
+        }
+
+
+@dataclass
 class SoilHealthReport:
-    """Structured soil health report"""
+    """Structured soil health report with zone-level analysis"""
     overall_score: float  # 0-100
     health_status: str  # "Excellent", "Good", "Fair", "Poor", "Critical"
     confidence_score: float  # 0-1
@@ -27,6 +59,11 @@ class SoilHealthReport:
     farmer_summary: str
     generated_at: datetime
     model_used: str
+    # New zone-level fields
+    zone_analysis: List[ZoneHealthResult] = field(default_factory=list)
+    spatial_summary: str = ""
+    priority_zones: List[str] = field(default_factory=list)
+    heatmap_data: List[List[float]] = field(default_factory=list)
 
 class SoilHealthAgent:
     """
@@ -222,47 +259,82 @@ Provide specific numerical values and clear actionable guidance."""
         return json.dumps(serializable_data, indent=2, default=str)
     
     def _create_technical_analysis_prompt(self, farm_data: Dict[str, Any]) -> str:
-        """Create detailed technical analysis prompt for Claude"""
+        """Create detailed technical analysis prompt for Claude with zone-level analysis"""
+        
+        # Extract zonal data for spatial analysis prompt
+        zonal_analysis = farm_data.get("zonal_analysis", {})
+        zones = zonal_analysis.get("zones", [])
+        has_zones = len(zones) > 0
+        
+        zone_summary = ""
+        if has_zones:
+            zone_summary = f"""
+SPATIAL ZONAL ANALYSIS (CRITICAL - Analyze each zone separately!):
+Grid Size: {zonal_analysis.get('grid_size', 'N/A')}
+Total Zones: {len(zones)}
+Problem Zones: {', '.join(zonal_analysis.get('problem_zones', [])) or 'None identified'}
+
+INDIVIDUAL ZONE DATA (provide recommendations for EACH zone):
+"""
+            for zone in zones:
+                zone_summary += f"""
+Zone {zone['zone_id']} ({zone['position']}):
+  - Health Score: {zone['health_score']:.1f}/100 ({zone['status']})
+  - NDVI: {zone['ndvi']:.3f}
+  - NDWI: {zone['ndwi']:.3f}
+  - Moisture: {zone['moisture']:.1f}%
+  - Existing Alerts: {', '.join(zone['alerts']) if zone['alerts'] else 'None'}
+"""
         
         return f"""
-ADVANCED SOIL HEALTH DIAGNOSTIC ANALYSIS
+ADVANCED SOIL HEALTH DIAGNOSTIC ANALYSIS - PRECISION AGRICULTURE MODE
 
-You are conducting a detailed technical assessment using satellite-derived agricultural data. Apply advanced soil science principles and precision agriculture methodologies.
+You are conducting a detailed technical assessment using satellite-derived agricultural data. Apply advanced soil science principles and PRECISION AGRICULTURE methodologies.
+
+IMPORTANT: This farm has been divided into MULTIPLE ZONES for localized analysis. You MUST provide zone-specific recommendations, not just overall farm recommendations.
 
 FARM CONTEXT:
 {self._serialize_farm_data(farm_data)}
 
+{zone_summary if has_zones else "NOTE: Single-point analysis (no zonal data available)"}
+
 DIAGNOSTIC FRAMEWORK:
 
-1. VEGETATION HEALTH ANALYSIS:
-   - Analyze NDVI, SAVI, EVI patterns
-   - Assess vegetation stress indicators
-   - Evaluate seasonal growth patterns
+1. OVERALL FARM ASSESSMENT:
+   - General farm health trends
+   - Cross-zone patterns and correlations
+   - Environmental factors affecting the entire farm
+
+2. ZONE-BY-ZONE ANALYSIS (REQUIRED if zones present):
+   For EACH zone, analyze:
+   - Specific health issues in that zone
+   - Why this zone differs from others
+   - Zone-specific causes of problems
+   - Targeted interventions for that zone
+
+3. VEGETATION HEALTH ANALYSIS:
+   - Analyze NDVI, SAVI, EVI patterns per zone
+   - Identify spatial patterns of vegetation stress
+   - Evaluate which zones have healthy vs stressed vegetation
    - Consider crop-specific optimal ranges
 
-2. SOIL CHEMISTRY ASSESSMENT:
+4. SOIL CHEMISTRY ASSESSMENT:
    - pH implications for nutrient availability
-   - Salinity effects on crop performance
-   - Nutrient deficiency indicators
+   - Salinity effects on crop performance per zone
+   - Nutrient deficiency indicators by area
    - Soil buffer capacity considerations
 
-3. PHYSICAL SOIL PROPERTIES:
-   - Moisture retention analysis
+5. PHYSICAL SOIL PROPERTIES:
+   - Moisture retention analysis per zone
    - Soil structure evaluation (BSI)
-   - Compaction indicators
-   - Erosion risk assessment
+   - Compaction indicators by area
+   - Erosion risk assessment per zone
 
-4. ENVIRONMENTAL STRESS FACTORS:
-   - Temperature stress analysis
-   - Water stress indicators
-   - Weather pattern impacts
-   - Climate adaptation requirements
-
-5. MULTI-TEMPORAL ANALYSIS:
-   - Historical trend evaluation
-   - Seasonal variation patterns
-   - Degradation or improvement trends
-   - Predictive indicators
+6. SPATIAL RECOMMENDATIONS (CRITICAL):
+   Provide recommendations in this format:
+   - ZONE [ID]: [Specific action for this zone]
+   - Example: "ZONE NE: Increase irrigation frequency - low moisture detected"
+   - Example: "ZONE SW: Add nitrogen fertilizer - NDVI below optimal"
 
 REASONING METHODOLOGY:
 Use step-by-step analytical reasoning:
@@ -389,7 +461,7 @@ Provide specific numerical targets and measurable outcomes.
                 system_prompt=system_prompt,
                 max_tokens=2000,
                 temperature=0.2,  # Very low temperature for technical analysis
-                model="claude-3-5-sonnet-20241022"
+                model="claude-sonnet-4-20250514"
             )
             claude_duration = time.time() - claude_start
             logger.info(f"🧠 Claude analysis completed in {claude_duration:.2f}s")
@@ -429,7 +501,7 @@ Provide specific numerical targets and measurable outcomes.
         
         # Parse recommendations and deficiencies
         recommendations = self._extract_recommendations(claude_response)
-        deficiencies = self._extract_deficiencies(claude_response)
+        deficiencies = self._extract_deficiencies(claude_response, farm_data)
         key_indicators = self._extract_key_indicators(farm_data)
         
         # Generate farmer-friendly summary
@@ -493,53 +565,200 @@ Provide specific numerical targets and measurable outcomes.
     
     def _extract_recommendations(self, claude_response: Optional[str]) -> List[Dict[str, Any]]:
         """Extract structured recommendations from Claude's response"""
+        import re
         
         if not claude_response:
-            return []
+            return self._get_fallback_recommendations()
         
-        # This would typically use more sophisticated NLP parsing
-        # For now, we'll create structured recommendations based on common patterns
+        recommendations = []
         
-        recommendations = [
-            {
-                "priority": "High",
-                "category": "Soil Chemistry",
-                "action": "pH adjustment",
-                "description": "Apply lime to raise soil pH to optimal range",
-                "timeline": "Before next planting",
-                "estimated_cost": "$50-100/acre",
-                "expected_benefit": "Improved nutrient availability"
-            },
-            {
-                "priority": "Medium", 
-                "category": "Water Management",
-                "action": "Irrigation optimization",
-                "description": "Implement drip irrigation to improve water efficiency",
-                "timeline": "Next growing season",
-                "estimated_cost": "$200-500/acre",
-                "expected_benefit": "Better moisture retention"
-            }
-        ]
+        # Try to parse numbered recommendations from AI response
+        # Look for patterns like "1.", "•", "-", or "Recommendation:"
+        lines = claude_response.split('\n')
+        current_rec = None
         
-        return recommendations
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Check for numbered items or bullet points
+            is_rec_start = (
+                re.match(r'^[\d]+[.):]\s*', line) or
+                re.match(r'^[•\-\*]\s*', line) or
+                'recommend' in line.lower() or
+                'action' in line.lower() or
+                'step' in line.lower()
+            )
+            
+            if is_rec_start and len(line) > 10:
+                # Clean up the line
+                clean_line = re.sub(r'^[\d•\-\*]+[.):]*\s*', '', line)
+                
+                # Determine priority from keywords
+                priority = "Medium"
+                if any(word in line.lower() for word in ['urgent', 'immediate', 'critical', 'high priority']):
+                    priority = "High"
+                elif any(word in line.lower() for word in ['optional', 'consider', 'long-term', 'low priority']):
+                    priority = "Low"
+                
+                # Determine category from keywords
+                category = "General"
+                if any(word in line.lower() for word in ['ph', 'lime', 'nutrient', 'fertiliz', 'nitrogen', 'phosphorus']):
+                    category = "Soil Chemistry"
+                elif any(word in line.lower() for word in ['water', 'irrigat', 'moisture', 'drainage']):
+                    category = "Water Management"
+                elif any(word in line.lower() for word in ['organic', 'compost', 'mulch', 'cover crop']):
+                    category = "Organic Matter"
+                elif any(word in line.lower() for word in ['erosion', 'tillage', 'compaction']):
+                    category = "Soil Structure"
+                elif any(word in line.lower() for word in ['test', 'monitor', 'sample']):
+                    category = "Monitoring"
+                
+                recommendations.append({
+                    "priority": priority,
+                    "category": category,
+                    "action": clean_line[:100],  # First 100 chars as action summary
+                    "description": clean_line,
+                    "timeline": "As soon as practical",
+                    "estimated_cost": "Varies",
+                    "expected_benefit": "Improved soil health"
+                })
+        
+        # If we couldn't extract any, use AI-aware fallback
+        if not recommendations:
+            return self._get_fallback_recommendations()
+        
+        return recommendations[:5]  # Return top 5 recommendations
     
-    def _extract_deficiencies(self, claude_response: Optional[str]) -> List[Dict[str, Any]]:
-        """Extract soil deficiencies from analysis"""
-        
+    def _get_fallback_recommendations(self) -> List[Dict[str, Any]]:
+        """Return sensible default recommendations when AI parsing fails"""
         return [
             {
-                "type": "Nutrient Deficiency",
-                "issue": "Low phosphorus availability",
-                "severity": "Moderate",
-                "impact": "Reduced root development and flowering"
+                "priority": "High",
+                "category": "Monitoring",
+                "action": "Conduct comprehensive soil testing",
+                "description": "Get a professional soil test to determine exact nutrient levels, pH, and organic matter content",
+                "timeline": "Within 2 weeks",
+                "estimated_cost": "$30-100",
+                "expected_benefit": "Accurate baseline for targeted improvements"
             },
             {
-                "type": "Physical Property",
-                "issue": "Soil compaction",
-                "severity": "Mild",
-                "impact": "Restricted water infiltration"
+                "priority": "Medium",
+                "category": "Water Management",
+                "action": "Assess irrigation and drainage",
+                "description": "Evaluate current water management practices and adjust based on soil moisture readings",
+                "timeline": "Before next planting",
+                "estimated_cost": "Varies",
+                "expected_benefit": "Optimized water use and healthier root zones"
             }
         ]
+    
+    def _extract_deficiencies(self, claude_response: Optional[str], farm_data: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+        """Extract soil deficiencies from analysis based on actual data"""
+        import re
+        
+        deficiencies = []
+        soil_data = (farm_data or {}).get('soil_analysis', {})
+        
+        # Check actual soil data for deficiencies
+        ndvi = soil_data.get('ndvi', 0.5)
+        ph = soil_data.get('ph_estimate', 7.0)
+        moisture = soil_data.get('moisture_content', 0.4)
+        salinity = soil_data.get('salinity_estimate', 0.1)
+        bsi = soil_data.get('bsi', 0.2)
+        
+        # NDVI-based vegetation stress
+        if ndvi < 0.3:
+            deficiencies.append({
+                "type": "Vegetation Stress",
+                "issue": f"Very low vegetation health (NDVI: {ndvi:.2f})",
+                "severity": "Critical",
+                "impact": "Crops may be dying or severely stressed, immediate intervention needed"
+            })
+        elif ndvi < 0.5:
+            deficiencies.append({
+                "type": "Vegetation Stress", 
+                "issue": f"Below-optimal vegetation health (NDVI: {ndvi:.2f})",
+                "severity": "Moderate",
+                "impact": "Reduced photosynthesis and potential yield loss"
+            })
+        
+        # pH issues
+        if ph < 5.5:
+            deficiencies.append({
+                "type": "Soil Chemistry",
+                "issue": f"Acidic soil (pH: {ph:.1f})",
+                "severity": "High",
+                "impact": "Nutrient lockout, aluminum toxicity risk, poor microbial activity"
+            })
+        elif ph > 8.0:
+            deficiencies.append({
+                "type": "Soil Chemistry",
+                "issue": f"Alkaline soil (pH: {ph:.1f})",
+                "severity": "Moderate",
+                "impact": "Iron and phosphorus deficiency, reduced micronutrient availability"
+            })
+        
+        # Moisture issues
+        if moisture < 0.2:
+            deficiencies.append({
+                "type": "Water Stress",
+                "issue": f"Low soil moisture ({moisture*100:.0f}%)",
+                "severity": "High" if moisture < 0.1 else "Moderate",
+                "impact": "Drought stress, reduced nutrient uptake, wilting"
+            })
+        elif moisture > 0.8:
+            deficiencies.append({
+                "type": "Water Stress",
+                "issue": f"Excessive soil moisture ({moisture*100:.0f}%)",
+                "severity": "Moderate",
+                "impact": "Root rot risk, anaerobic conditions, nutrient leaching"
+            })
+        
+        # Salinity issues
+        if salinity > 0.3:
+            deficiencies.append({
+                "type": "Salinity",
+                "issue": f"Elevated salt levels ({salinity:.2f})",
+                "severity": "High" if salinity > 0.5 else "Moderate",
+                "impact": "Osmotic stress, reduced water uptake, crop damage"
+            })
+        
+        # Bare soil exposure
+        if bsi > 0.5:
+            deficiencies.append({
+                "type": "Soil Structure",
+                "issue": f"High bare soil exposure (BSI: {bsi:.2f})",
+                "severity": "Moderate",
+                "impact": "Erosion risk, soil temperature extremes, moisture loss"
+            })
+        
+        # Also try to extract from AI response if available
+        if claude_response:
+            # Look for deficiency-related keywords in AI response
+            deficiency_keywords = ['deficien', 'lack', 'low level', 'insufficient', 'poor', 'stress', 'problem']
+            for keyword in deficiency_keywords:
+                if keyword in claude_response.lower():
+                    # Find sentences containing the keyword
+                    sentences = re.split(r'[.!?]', claude_response)
+                    for sentence in sentences:
+                        if keyword in sentence.lower() and len(sentence) > 20:
+                            if len(deficiencies) < 5:  # Limit to 5 deficiencies
+                                deficiencies.append({
+                                    "type": "AI-Identified",
+                                    "issue": sentence.strip()[:150],
+                                    "severity": "Moderate",
+                                    "impact": "See detailed analysis"
+                                })
+                            break
+        
+        return deficiencies if deficiencies else [{
+            "type": "Assessment",
+            "issue": "No major deficiencies detected",
+            "severity": "None",
+            "impact": "Soil appears to be in acceptable condition"
+        }]
     
     def _extract_key_indicators(self, farm_data: Dict[str, Any]) -> Dict[str, Any]:
         """Extract and format key soil indicators"""

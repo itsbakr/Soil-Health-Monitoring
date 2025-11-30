@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
+import type { LeafletMouseEvent } from 'leaflet'
 
 // Dynamically import map components to avoid SSR issues
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { 
@@ -13,49 +14,17 @@ const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapCo
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false })
 const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false })
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false })
-const useMapEvents = dynamic(() => import('react-leaflet').then(mod => mod.useMapEvents), { ssr: false })
+
+// Create a separate component for the location marker that uses the hook
+const LocationMarkerComponent = dynamic(
+  () => import('./LocationMarker'),
+  { ssr: false }
+)
 
 interface ClickableMapProps {
   selectedLocation?: { lat: number; lng: number } | null
   onLocationSelect: (lat: number, lng: number) => void
   className?: string
-}
-
-function LocationMarker({ selectedLocation, onLocationSelect }: { 
-  selectedLocation?: { lat: number; lng: number } | null
-  onLocationSelect: (lat: number, lng: number) => void 
-}) {
-  const [position, setPosition] = useState(selectedLocation)
-
-  const map = useMapEvents({
-    click: (e) => {
-      const newPos = { lat: e.latlng.lat, lng: e.latlng.lng }
-      setPosition(newPos)
-      onLocationSelect(e.latlng.lat, e.latlng.lng)
-      map.flyTo(e.latlng, map.getZoom())
-    },
-  })
-
-  useEffect(() => {
-    setPosition(selectedLocation)
-  }, [selectedLocation])
-
-  return position === null ? null : (
-    <Marker position={[position.lat, position.lng]}>
-      <Popup>
-        <div className="text-center">
-          <h3 className="font-semibold text-gray-900 mb-2">Selected Location</h3>
-          <p className="text-sm text-gray-600">
-            <strong>Coordinates:</strong><br />
-            {position.lat.toFixed(6)}, {position.lng.toFixed(6)}
-          </p>
-          <p className="text-xs text-gray-500 mt-2">
-            Click anywhere on the map to change location
-          </p>
-        </div>
-      </Popup>
-    </Marker>
-  )
 }
 
 export default function ClickableMap({ 
@@ -95,7 +64,7 @@ export default function ClickableMap({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
-        <LocationMarker selectedLocation={selectedLocation} onLocationSelect={onLocationSelect} />
+        <LocationMarkerComponent selectedLocation={selectedLocation} onLocationSelect={onLocationSelect} />
       </MapContainer>
       
       {/* Instructions overlay */}

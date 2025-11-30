@@ -53,9 +53,10 @@ class Settings(BaseSettings):
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = Field(default=60, description="API rate limit per minute")
     
-    # Monitoring
+    # Monitoring & Error Tracking
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
     ENABLE_METRICS: bool = Field(default=True, description="Enable metrics collection")
+    SENTRY_DSN: str = Field(default="", description="Sentry DSN for error tracking")
     
     class Config:
         env_file = [".env", "../.env"]  # Check current dir first, then parent

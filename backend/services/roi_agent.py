@@ -187,13 +187,41 @@ OUTPUT REQUIREMENTS:
         market_data: Dict[str, Any],
         weather_data: Dict[str, Any]
     ) -> str:
-        """Create comprehensive analysis prompt with all available data"""
+        """Create comprehensive analysis prompt with all available data including zonal analysis"""
+        
+        # Extract zonal data for zone-specific economic recommendations
+        zonal_analysis = farm_data.get("zonal_analysis", {})
+        zones = zonal_analysis.get("zones", [])
+        has_zones = len(zones) > 0
+        
+        zone_summary = ""
+        if has_zones:
+            zone_summary = f"""
+SPATIAL ZONAL ANALYSIS (CRITICAL for precision ROI recommendations):
+Grid Size: {zonal_analysis.get('grid_size', 'N/A')}
+Total Zones: {len(zones)}
+Problem Zones: {', '.join(zonal_analysis.get('problem_zones', [])) or 'None identified'}
+
+ZONE-BY-ZONE DATA:
+"""
+            for zone in zones:
+                zone_summary += f"""
+Zone {zone['zone_id']} ({zone['position']}):
+  - Health: {zone['health_score']:.1f}/100 ({zone['status']})
+  - NDVI: {zone['ndvi']:.3f} | Moisture: {zone['moisture']:.1f}%
+  - Issues: {', '.join(zone['alerts']) if zone['alerts'] else 'None'}
+"""
         
         return f"""
-COMPREHENSIVE ROI ANALYSIS AND CROP RECOMMENDATION
+COMPREHENSIVE ROI ANALYSIS AND CROP RECOMMENDATION - PRECISION AGRICULTURE MODE
+
+IMPORTANT: This farm has been divided into MULTIPLE ZONES for spatially-aware economic recommendations.
+You must consider zone-specific conditions when recommending crops and interventions.
 
 FARM CONTEXT:
 {self._serialize_farm_data(farm_data)}
+
+{zone_summary if has_zones else "NOTE: Single-point analysis (no zonal data available)"}
 
 SOIL HEALTH ASSESSMENT:
 Overall Score: {soil_health_report.overall_score}/100
@@ -215,33 +243,46 @@ ANALYSIS REQUIREMENTS:
    - Identify yield limiting factors from soil health data
    - Calculate actual vs potential ROI
    - Assess sustainability implications
+   - NOTE: Consider which ZONES are underperforming and why
 
-2. ALTERNATIVE CROP EVALUATION:
+2. ZONE-SPECIFIC INVESTMENT RECOMMENDATIONS (CRITICAL):
+   For each problem zone, provide:
+   - Specific intervention needed (e.g., "Zone NE: Add drip irrigation - $500")
+   - Expected ROI of that intervention
+   - Priority ranking (which zones to fix first)
+   
+   Example format:
+   - ZONE NE (Health: 45%): Invest in irrigation system - Est. ROI: 35%
+   - ZONE SW (Health: 52%): Apply nitrogen fertilizer - Est. ROI: 28%
+
+3. ALTERNATIVE CROP EVALUATION:
    Analyze these crops: Corn, Soybeans, Wheat, Cotton
    
    For each crop, provide:
    - Soil compatibility score (0-1) based on pH, salinity, moisture needs
-   - Expected yield adjustment based on soil conditions
+   - Expected yield adjustment based on ZONE-LEVEL soil conditions
    - Market favorability assessment using current price data
-   - Input cost estimates including soil amendments
+   - Input cost estimates including zone-specific soil amendments
    - Net profit calculations with confidence intervals
    - Risk assessment (Low/Moderate/High/Critical)
    - Implementation timeline and requirements
 
-3. SCENARIO ANALYSIS:
+4. SCENARIO ANALYSIS:
    Model three scenarios for top 3 crops:
    - Optimistic: Ideal conditions (90th percentile outcomes)
    - Most Likely: Expected conditions (50th percentile)
    - Pessimistic: Challenging conditions (10th percentile)
    
-   Include weather risks, market volatility, and soil challenges
+   Include weather risks, market volatility, and ZONE-SPECIFIC soil challenges
 
-4. MULTI-CRITERIA DECISION ANALYSIS:
+5. MULTI-CRITERIA DECISION ANALYSIS:
    Weight factors for recommendation:
    - Economic return (40%)
    - Risk level (25%)
    - Soil health impact (20%)
    - Implementation feasibility (15%)
+   
+   Consider how different zones affect overall farm ROI
 
 5. REASONING CHAIN:
    Show step-by-step reasoning for:
@@ -435,7 +476,7 @@ Provide clear decision justification with confidence assessment.
                 system_prompt=self._get_system_prompt(),
                 max_tokens=3000,
                 temperature=0.1,  # Very low for analytical consistency
-                model="claude-3-5-sonnet-20241022"
+                model="claude-sonnet-4-20250514"
             )
             
             # Step 2: Monte Carlo simulation for risk analysis
@@ -448,7 +489,7 @@ Provide clear decision justification with confidence assessment.
                 system_prompt="You are a quantitative analyst specializing in agricultural risk modeling.",
                 max_tokens=2000,
                 temperature=0.05,  # Extremely low for numerical consistency
-                model="claude-3-5-sonnet-20241022"
+                model="claude-sonnet-4-20250514"
             )
             
             # Step 3: Decision matrix analysis
@@ -467,7 +508,7 @@ Provide clear decision justification with confidence assessment.
                 system_prompt="You are a decision science expert specializing in agricultural economics.",
                 max_tokens=1500,
                 temperature=0.1,
-                model="claude-3-5-sonnet-20241022"
+                model="claude-sonnet-4-20250514"
             )
             
             # Step 4: Generate farmer-friendly summary
